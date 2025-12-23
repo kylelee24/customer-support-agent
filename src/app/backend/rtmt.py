@@ -12,7 +12,7 @@ class RTMiddleTier:
     endpoint: str
     deployment: str
     key: Optional[str] = None
-    selected_voice: str = "alloy"
+    selected_voice: str = "sage"
 
     # Tools are server-side only for now, though the case could be made for client-side tools
     # in addition to server-side tools that are invisible to the client
