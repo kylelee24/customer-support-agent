@@ -171,3 +171,7 @@ cython_debug/
 .pypirc
 
 .DS_Store
+
+# Call logs and archives
+call_logs/
+archive/

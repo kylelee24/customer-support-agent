@@ -1,0 +1,17 @@
+# Phone Numbers for Bulk Calling
+# One phone number per line
+# Lines starting with # are comments and will be ignored
+# Format: +1234567890 (include country code)
+
+# Note: Your ACS phone number is +18332739896
+# Add the phone numbers you want to CALL below (not your ACS number):
+
+# Example - add your test numbers here:
+# +15551234567
+# +15559876543
+# +16479699379
++16479699379
+
+# You can add more numbers below:
+
+

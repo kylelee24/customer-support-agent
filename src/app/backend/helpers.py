@@ -28,9 +28,9 @@ def transform_acs_to_openai_format(msg_data: Any, model: Optional[str], tools: d
                 "tools": [tool.schema for tool in tools.values()],
                 "turn_detection": {
                     "type": 'server_vad',
-                    "threshold": 0.7, # Adjust if necessary
-                    "prefix_padding_ms": 300, # Adjust if necessary
-                    "silence_duration_ms": 500 # Adjust if necessary
+                    "threshold": 0.8, # Higher threshold = less sensitive to interruptions
+                    "prefix_padding_ms": 600, # More padding before detecting speech
+                    "silence_duration_ms": 800 # Longer silence required to detect end of turn
                 },
             }
         }

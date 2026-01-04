@@ -9,6 +9,10 @@ from azure.communication.callautomation import (
     MediaStreamingContentType,
     MediaStreamingAudioChannelType,
     AudioFormat)
+import json
+import os
+from datetime import datetime
+from pathlib import Path
 
 class AcsCaller:
     source_number: str
@@ -16,6 +20,7 @@ class AcsCaller:
     acs_callback_path: str
     websocket_url: str
     media_streaming_configuration: MediaStreamingOptions
+    call_events: dict  # Track call events by connection ID
 
     def __init__(self, source_number:str, acs_connection_string: str, acs_callback_path: str, acs_media_streaming_websocket_path: str):
         self.source_number = source_number
@@ -30,17 +35,63 @@ class AcsCaller:
             enable_bidirectional=True,
             audio_format=AudioFormat.PCM24_K_MONO
         )
+        
+        # Initialize call tracking
+        self.call_events = {}
+        
+        # Setup logging directory
+        self.log_dir = Path("call_logs")
+        self.log_dir.mkdir(exist_ok=True)
+        self.events_log_file = self.log_dir / "call_events.jsonl"
+    
+    def log_call_event(self, event_type: str, call_connection_id: str, data: dict = None):
+        """Log call events to a JSONL file for tracking."""
+        event = {
+            "timestamp": datetime.now().isoformat(),
+            "event_type": event_type,
+            "call_connection_id": call_connection_id,
+            "data": data or {}
+        }
+        
+        # Write to JSONL file (one JSON object per line)
+        with open(self.events_log_file, 'a') as f:
+            f.write(json.dumps(event) + '\n')
+        
+        # Also print to console for real-time monitoring
+        print(f"[{event['timestamp']}] {event_type} - Call ID: {call_connection_id}")
+        if data:
+            print(f"  Data: {json.dumps(data, indent=2)}")
     
     async def initiate_call(self, target_number: str):
         self.call_automation_client = CallAutomationClient.from_connection_string(self.acs_connection_string)
         self.target_participant = PhoneNumberIdentifier(target_number)
         self.source_caller = PhoneNumberIdentifier(self.source_number)
-        self.call_automation_client.create_call(
+        
+        # Log call initiation
+        print(f"🔄 Initiating call to: {target_number}")
+        
+        result = self.call_automation_client.create_call(
             self.target_participant, 
             self.acs_callback_path,
             media_streaming=self.media_streaming_configuration,
             source_caller_id_number=self.source_caller
         )
+        
+        # Log the initiation with call details
+        if hasattr(result, 'call_connection_id'):
+            call_id = result.call_connection_id
+            self.call_events[call_id] = {
+                "target_number": target_number,
+                "source_number": self.source_number,
+                "initiated_at": datetime.now().isoformat(),
+                "status": "initiated"
+            }
+            self.log_call_event("CallInitiated", call_id, {
+                "target_number": target_number,
+                "source_number": self.source_number
+            })
+        
+        return result
 
     async def answer_inbound_call(self, incoming_call_context: str):
         self.call_automation_client = CallAutomationClient.from_connection_string(self.acs_connection_string)
@@ -58,10 +109,50 @@ class AcsCaller:
                 continue
                 
             call_connection_id = event.data['callConnectionId']
-            print(f"{event.type} event received for call connection id: {call_connection_id}")
-
+            
+            # Track different call events
             if event.type == "Microsoft.Communication.CallConnected":
-                print("Call connected")            
+                print("✅ Call connected")
+                if call_connection_id in self.call_events:
+                    self.call_events[call_connection_id]["connected_at"] = datetime.now().isoformat()
+                    self.call_events[call_connection_id]["status"] = "connected"
+                
+                self.log_call_event("CallConnected", call_connection_id, {
+                    "call_info": self.call_events.get(call_connection_id, {})
+                })
+            
+            elif event.type == "Microsoft.Communication.CallDisconnected":
+                print("❌ Call disconnected")
+                if call_connection_id in self.call_events:
+                    self.call_events[call_connection_id]["disconnected_at"] = datetime.now().isoformat()
+                    self.call_events[call_connection_id]["status"] = "disconnected"
+                    
+                    # Calculate call duration if connected
+                    if "connected_at" in self.call_events[call_connection_id]:
+                        connected = datetime.fromisoformat(self.call_events[call_connection_id]["connected_at"])
+                        disconnected = datetime.fromisoformat(self.call_events[call_connection_id]["disconnected_at"])
+                        duration_seconds = (disconnected - connected).total_seconds()
+                        self.call_events[call_connection_id]["duration_seconds"] = duration_seconds
+                
+                self.log_call_event("CallDisconnected", call_connection_id, {
+                    "call_info": self.call_events.get(call_connection_id, {})
+                })
+            
+            elif event.type == "Microsoft.Communication.CallTransferAccepted":
+                self.log_call_event("CallTransferAccepted", call_connection_id)
+            
+            elif event.type == "Microsoft.Communication.CallTransferFailed":
+                self.log_call_event("CallTransferFailed", call_connection_id)
+            
+            elif event.type == "Microsoft.Communication.RecognizeCompleted":
+                self.log_call_event("RecognizeCompleted", call_connection_id)
+            
+            elif event.type == "Microsoft.Communication.RecognizeFailed":
+                self.log_call_event("RecognizeFailed", call_connection_id)
+            
+            else:
+                # Log any other event types we receive
+                self.log_call_event(event.type, call_connection_id)
 
         return web.Response(status=200)
 
@@ -77,7 +168,7 @@ class AcsCaller:
         # Handle incoming call events
         try:
             event_data = await request.json()
-            print(f"Received event data: {event_data}")
+            print(f"📞 Received inbound event data: {event_data}")
             
             # EventGrid sends events in an array
             for event_dict in event_data:
@@ -85,14 +176,26 @@ class AcsCaller:
                 event = EventGridEvent.from_dict(event_dict)
                 
                 if event.event_type == "Microsoft.Communication.IncomingCall":
-                    print(f"Incoming call event data: {event.data}")
+                    print(f"📥 Incoming call event data: {event.data}")
                     incoming_call_context = event.data['incomingCallContext']
+                    
+                    # Log the incoming call
+                    from_number = event.data.get('from', {}).get('phoneNumber', {}).get('value', 'unknown')
+                    to_number = event.data.get('to', {}).get('phoneNumber', {}).get('value', 'unknown')
+                    
+                    self.log_call_event("IncomingCall", "incoming", {
+                        "from_number": from_number,
+                        "to_number": to_number,
+                        "incoming_call_context": incoming_call_context
+                    })
+                    
                     await self.answer_inbound_call(incoming_call_context)
-                    print("Incoming call answered")
+                    print("✅ Incoming call answered")
                     return web.Response(status=200)
                 
         except Exception as e:
-            print(f"Error handling inbound call: {str(e)}")
+            print(f"❌ Error handling inbound call: {str(e)}")
+            self.log_call_event("InboundCallError", "error", {"error": str(e)})
             return web.Response(status=500, text=str(e))
 
         return web.Response(status=200)
