@@ -4,11 +4,7 @@ body {
   margin: 0;
   padding: 0;
   font-family: 'Open Sans', Arial, sans-serif;
-  background-image: url('../static/abstract.jpg');
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #333;
   text-align: center;
 }
@@ -37,9 +33,9 @@ main.container {
   top: 0;
   width: 20rem;
   height: 100%;
-  background-color: #f4f4f4;
+  background-color: #ffffff;
   padding: 20px;
-  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.5);
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.2);
   margin-top: 50px;
   z-index: 9999; /* Bring the sidebar to the front */
 }
@@ -57,11 +53,12 @@ div.main-container {
 }
 
 article {
-  background-color: rgba(255, 255, 255, 0.8);
+  background-color: rgba(255, 255, 255, 0.95);
   padding: 2rem;
-  border-radius: 10px;
+  border-radius: 15px;
   max-width: 600px;
   margin: 10px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
 }
 
 .separator {
@@ -78,9 +75,10 @@ article {
 
 h1 {
   margin-bottom: 30px;
-  color: #fff;
+  color: #ffffff;
   font-weight: bold;
   font-size: 2.5em;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 h3 {
@@ -88,16 +86,20 @@ h3 {
 }
 
 .black-button {
-  background-color: #000 !important;
+  background-color: #667eea !important;
   color: #fff !important;
   border: none;
   cursor: pointer;
   padding: 10px 20px;
   font-size: 16px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
 }
 
 .black-button:hover {
-  background-color: #333 !important;
+  background-color: #5568d3 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
 }
 
 #toggleButton {
