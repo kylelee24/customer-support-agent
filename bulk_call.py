@@ -193,9 +193,13 @@ async def main():
     
     # Configuration
     # Default to Azure endpoint, fall back to localhost for local development
-    API_URL = os.environ.get("CALL_API_URL", "https://callcenterapp.mangohill-ecc6369c.eastus2.azurecontainerapps.io/call")
+    # API_URL = os.environ.get("CALL_API_URL", "https://callcenterapp.mangohill-ecc6369c.eastus2.azurecontainerapps.io/call")
+    API_URL = os.environ.get("CALL_API_URL", "https://callcenterapp.purplebay-fcdfd637.eastus2.azurecontainerapps.io/call")
     DELAY_SECONDS = int(os.environ.get("CALL_DELAY_SECONDS", "120"))
     PHONE_LIST_FILE = os.environ.get("PHONE_LIST_FILE", "phone_numbers.txt")
+    print(f"🌐 DELAY_SECONDS: {DELAY_SECONDS}")
+    print(f"🌐 PHONE_LIST_FILE: {PHONE_LIST_FILE}") 
+    print(f"🌐 API URL: {API_URL}")
     
     # Option 1: Load from file
     if os.path.exists(PHONE_LIST_FILE):

@@ -180,7 +180,7 @@ To customize the knowledge base, you can add or remove files from the `data` fol
 
 ### System prompt
 
-By default, the [hardcoded system prompt](src/app/system_prompt.md) is used. You can customize the system prompt by placing a file named `system_prompt.md` in the `prompt` container of the Azure Storage Account. If this file exists, it will be used instead of the hardcoded system prompt.
+By default, the [hardcoded ](src/app/system_prompt.md) is used. You can customize the system prompt by placing a file named `system_prompt.md` in the `prompt` container of the Azure Storage Account. If this file exists, it will be used instead of the hardcoded system prompt.
 
 ---
 
