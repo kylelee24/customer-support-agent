@@ -1,8 +1,17 @@
 # Bulk Calling Documentation
 
+**Location:** `scripts/bulk_call/`
+
 ## Overview
 
 This system allows you to automatically call a list of phone numbers sequentially using the Azure Communication Services integration. It provides comprehensive logging of both call initiation and call events.
+
+## Quick Start
+
+```bash
+# From project root
+python scripts/bulk_call/bulk_call.py
+```
 
 ## Components
 
@@ -59,13 +68,15 @@ pip install aiohttp
 
 ### Step 1: Create Your Phone Number List
 
-Edit `phone_numbers.txt` and add your phone numbers (one per line):
+Edit `scripts/bulk_call/phone_numbers.txt` and add your phone numbers (one per line):
 
 ```txt
 +1234567890
 +1987654321
 +1555123456
 ```
+
+**Note:** The script looks for `phone_numbers.txt` in `scripts/bulk_call/` first, then the project root.
 
 **Important:** 
 - Include the country code (e.g., +1 for US/Canada)

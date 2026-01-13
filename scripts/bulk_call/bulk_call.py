@@ -3,6 +3,9 @@
 Bulk Calling Script for Customer Support Agent
 Calls a list of phone numbers one by one with configurable delays.
 Logs all activity to CSV and console.
+
+Run from project root:
+    python scripts/bulk_call/bulk_call.py
 """
 
 import asyncio
@@ -12,6 +15,10 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import List
+
+# Get script directory and project root
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent.parent
 
 
 class BulkCaller:
@@ -196,7 +203,13 @@ async def main():
     # API_URL = os.environ.get("CALL_API_URL", "https://callcenterapp.mangohill-ecc6369c.eastus2.azurecontainerapps.io/call")
     API_URL = os.environ.get("CALL_API_URL", "https://callcenterapp.purplebay-fcdfd637.eastus2.azurecontainerapps.io/call")
     DELAY_SECONDS = int(os.environ.get("CALL_DELAY_SECONDS", "120"))
-    PHONE_LIST_FILE = os.environ.get("PHONE_LIST_FILE", "phone_numbers.txt")
+    
+    # Look for phone_numbers.txt in script directory first, then project root
+    default_phone_file = SCRIPT_DIR / "phone_numbers.txt"
+    if not default_phone_file.exists():
+        default_phone_file = PROJECT_ROOT / "phone_numbers.txt"
+    
+    PHONE_LIST_FILE = os.environ.get("PHONE_LIST_FILE", str(default_phone_file))
     print(f"🌐 DELAY_SECONDS: {DELAY_SECONDS}")
     print(f"🌐 PHONE_LIST_FILE: {PHONE_LIST_FILE}") 
     print(f"🌐 API URL: {API_URL}")
@@ -208,7 +221,7 @@ async def main():
     else:
         # Option 2: Hardcoded example list (for testing)
         print(f"⚠️  File '{PHONE_LIST_FILE}' not found. Using example numbers.")
-        print(f"💡 Create a '{PHONE_LIST_FILE}' file with one number per line.\n")
+        print(f"💡 Create a 'phone_numbers.txt' file in scripts/bulk_call/ with one number per line.\n")
         phone_numbers = [
             "+1234567890",
             "+1987654321",
@@ -219,10 +232,12 @@ async def main():
         print("❌ No phone numbers to call. Exiting.")
         return
     
-    # Create caller and start calling
+    # Create caller and start calling (logs still go to project root call_logs/)
+    log_dir = PROJECT_ROOT / "call_logs"
     caller = BulkCaller(
         api_url=API_URL,
-        delay_between_calls=DELAY_SECONDS
+        delay_between_calls=DELAY_SECONDS,
+        log_dir=str(log_dir)
     )
     
     await caller.call_list(phone_numbers)

@@ -201,7 +201,21 @@ python src/app/app.py
 
 To make inbound calls work for local development, you need to [set up another Event Grid System Topic](#forward-inbound-calls-to-your-application) and set the Web Socket endpoint to your ngrok domain (e.g. `https://1234-567-123-456-789/acs/incoming`).
 
-## Testing
+## Scripts & Testing
+
+### Bulk Calling
+
+Make automated calls to a list of phone numbers:
+
+```bash
+# Edit phone numbers
+vim scripts/bulk_call/phone_numbers.txt
+
+# Run bulk calling
+python scripts/bulk_call/bulk_call.py
+```
+
+See [scripts/bulk_call/README.md](scripts/bulk_call/README.md) for complete guide.
 
 ### Call Transcript Testing
 
