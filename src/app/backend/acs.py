@@ -41,6 +41,7 @@ class AcsCaller:
         
         # Initialize call tracking
         self.call_events = {}
+        self._pending_incoming_call = {}
         
         # Setup logging directory
         self.log_dir = Path("call_logs")
@@ -171,6 +172,31 @@ class AcsCaller:
             # Track different call events
             if event.type == "Microsoft.Communication.CallConnected":
                 print("✅ Call connected")
+                
+                # Initialize call_events entry if this is an inbound call (not already tracked)
+                if call_connection_id not in self.call_events:
+                    # Check if we have pending incoming call info
+                    if hasattr(self, '_pending_incoming_call') and self._pending_incoming_call:
+                        from_number = self._pending_incoming_call.get('from_number', 'Unknown')
+                        to_number = self._pending_incoming_call.get('to_number', self.source_number)
+                        initiated_at = self._pending_incoming_call.get('timestamp', datetime.now().isoformat())
+                        print(f"📞 Using incoming call info: from {from_number} to {to_number}")
+                    else:
+                        from_number = "Unknown"
+                        to_number = self.source_number
+                        initiated_at = datetime.now().isoformat()
+                    
+                    self.call_events[call_connection_id] = {
+                        "initiated_at": initiated_at,
+                        "status": "connected",
+                        "target_number": from_number,  # For incoming calls, the "target" is actually the caller
+                        "source_number": to_number
+                    }
+                    
+                    # Clear pending info
+                    if hasattr(self, '_pending_incoming_call'):
+                        self._pending_incoming_call = {}
+                
                 if call_connection_id in self.call_events:
                     self.call_events[call_connection_id]["connected_at"] = datetime.now().isoformat()
                     self.call_events[call_connection_id]["status"] = "connected"
@@ -181,6 +207,24 @@ class AcsCaller:
                             call_connection_id, 
                             self.call_events[call_connection_id]
                         )
+                
+                # Link "unknown" session to actual call ID if transcript manager has it
+                if self.transcript_manager and "unknown" in self.transcript_manager.transcripts:
+                    print(f"🔗 Linking 'unknown' session to call ID: {call_connection_id}")
+                    self.transcript_manager.transcripts[call_connection_id] = self.transcript_manager.transcripts.pop("unknown")
+                    if "unknown" in self.transcript_manager.session_metadata:
+                        metadata = self.transcript_manager.session_metadata.pop("unknown", {})
+                        # Merge with existing metadata
+                        if call_connection_id not in self.transcript_manager.session_metadata:
+                            self.transcript_manager.session_metadata[call_connection_id] = {}
+                        self.transcript_manager.session_metadata[call_connection_id].update(metadata)
+                        self.transcript_manager.session_metadata[call_connection_id].update(self.call_events.get(call_connection_id, {}))
+                    # Also update the rtmt session map if we have access
+                    if self.rtmt:
+                        for ws, sess_id in list(self.rtmt._session_map.items()):
+                            if sess_id == "unknown":
+                                self.rtmt._session_map[ws] = call_connection_id
+                                print(f"🔗 Updated WebSocket session mapping: unknown → {call_connection_id}")
                 
                 self.log_call_event("CallConnected", call_connection_id, {
                     "call_info": self.call_events.get(call_connection_id, {})
@@ -257,6 +301,15 @@ class AcsCaller:
                     # Log the incoming call
                     from_number = event.data.get('from', {}).get('phoneNumber', {}).get('value', 'unknown')
                     to_number = event.data.get('to', {}).get('phoneNumber', {}).get('value', 'unknown')
+                    
+                    # Store incoming call info for later (will be linked when CallConnected event arrives)
+                    # We don't know the call_connection_id yet, so we'll store it temporarily
+                    # and link it when CallConnected event fires
+                    if not hasattr(self, '_pending_incoming_call'):
+                        self._pending_incoming_call = {}
+                    self._pending_incoming_call['from_number'] = from_number
+                    self._pending_incoming_call['to_number'] = to_number
+                    self._pending_incoming_call['timestamp'] = datetime.now().isoformat()
                     
                     self.log_call_event("IncomingCall", "incoming", {
                         "from_number": from_number,
