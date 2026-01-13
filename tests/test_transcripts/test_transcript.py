@@ -10,8 +10,9 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Add src/app to path
-sys.path.insert(0, str(Path(__file__).parent / "src" / "app"))
+# Add src/app to path (adjust for new location in tests/test_transcripts/)
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root / "src" / "app"))
 
 from backend.transcript_manager import TranscriptManager
 from backend.email_service import EmailService
@@ -147,6 +148,9 @@ async def simulate_call_transcript(
         custom_file: Path to custom conversation file
         phone_number: Phone number to use for the test call
     """
+    # Get project root
+    project_root = Path(__file__).parent.parent.parent
+    
     load_dotenv()
     
     print("\n" + "="*80)
@@ -266,9 +270,10 @@ async def simulate_call_transcript(
     html_content = transcript_manager.format_as_html(call_id, summary_data)
     print("  ✓ HTML email formatted\n")
     
-    # Save HTML to file for inspection
-    html_output = Path("call_logs") / f"test_email_{call_id}.html"
-    html_output.parent.mkdir(exist_ok=True)
+    # Save HTML to file for inspection (use project root for call_logs)
+    call_logs_dir = project_root / "call_logs"
+    call_logs_dir.mkdir(exist_ok=True)
+    html_output = call_logs_dir / f"test_email_{call_id}.html"
     with open(html_output, 'w') as f:
         f.write(html_content)
     print(f"💾 HTML email saved to: {html_output}")

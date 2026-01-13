@@ -201,6 +201,22 @@ python src/app/app.py
 
 To make inbound calls work for local development, you need to [set up another Event Grid System Topic](#forward-inbound-calls-to-your-application) and set the Web Socket endpoint to your ngrok domain (e.g. `https://1234-567-123-456-789/acs/incoming`).
 
+## Testing
+
+### Call Transcript Testing
+
+Test the transcript, AI summary, and email features without making phone calls:
+
+```bash
+# List available test scenarios
+python tests/test_transcripts/test_transcript.py --list
+
+# Run a test
+python tests/test_transcripts/test_transcript.py --scenario meeting_scheduled
+```
+
+See [tests/test_transcripts/README.md](tests/test_transcripts/README.md) for complete testing guide.
+
 ## Customization
 
 You can customize the knowledge base and the system prompt of the bot.

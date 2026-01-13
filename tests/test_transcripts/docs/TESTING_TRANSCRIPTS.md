@@ -2,7 +2,7 @@
 
 This guide shows you how to test the transcript, summary, and email features without making actual phone calls.
 
-## Test Script: `test_transcript.py`
+## Test Script: `tests/test_transcripts/test_transcript.py`
 
 The test script simulates completed call transcripts and runs them through the complete pipeline:
 - ✅ Creates realistic call transcripts
