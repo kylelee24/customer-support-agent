@@ -132,6 +132,7 @@ class TranscriptManager:
         
         # Add AI-generated summary if available
         if summary_data and summary_data.get("summary"):
+            logger.info(f"📊 Adding summary to HTML (length: {len(summary_data.get('summary'))} chars)")
             html_parts.append("<div class='summary-section' style='background-color: #e8f4f8; padding: 20px; border-radius: 5px; margin-bottom: 25px; border-left: 4px solid #0078d4;'>")
             html_parts.append("<h2 style='margin-top: 0; font-size: 18px; color: #0078d4; margin-bottom: 15px;'>📊 AI-Generated Call Summary</h2>")
             
@@ -139,6 +140,7 @@ class TranscriptManager:
             summary_text = summary_data.get("summary", "")
             # Convert markdown to HTML (simple conversion for paragraphs)
             summary_paragraphs = summary_text.split('\n\n')
+            logger.info(f"   Split into {len(summary_paragraphs)} paragraphs")
             for para in summary_paragraphs:
                 if para.strip():
                     html_parts.append(f"<p style='margin: 10px 0; line-height: 1.6; color: #333;'>{para.strip()}</p>")
@@ -178,6 +180,12 @@ class TranscriptManager:
                 html_parts.append(f"<p style='margin: 15px 0; color: #666; font-style: italic;'>{zoom_info}</p>")
             
             html_parts.append("</div>")
+        else:
+            # Debug: Log why summary wasn't added
+            if summary_data is None:
+                logger.info("⚠️ summary_data is None - no summary will be added")
+            elif not summary_data.get("summary"):
+                logger.info(f"⚠️ summary_data has no 'summary' key or it's empty: {list(summary_data.keys())}")
         
         # Add transcript entries
         html_parts.append("<div class='transcript'>")
