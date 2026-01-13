@@ -12,6 +12,7 @@ from backend.rtmt import RTMiddleTier
 from backend.acs import AcsCaller
 from backend.transcript_manager import TranscriptManager
 from backend.email_service import EmailService
+from backend.call_summarizer import CallSummarizer
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.aio import SearchClient
 
@@ -52,6 +53,14 @@ async def create_app():
     rtmt.transcript_manager = transcript_manager
     logger.info("✅ Transcript manager initialized")
     
+    # Initialize call summarizer (uses same OpenAI endpoint for GPT-4o-mini)
+    call_summarizer = None
+    try:
+        call_summarizer = CallSummarizer(llm_endpoint, llm_key, azure_credentials if not llm_key else None)
+        logger.info("✅ Call summarizer initialized")
+    except Exception as e:
+        logger.warning(f"⚠️ Call summarizer could not be initialized: {e}")
+    
     # Initialize email service
     email_connection_string = os.environ.get("ACS_EMAIL_CONNECTION_STRING")
     email_sender = os.environ.get("ACS_EMAIL_SENDER")
@@ -80,11 +89,12 @@ async def create_app():
             acs_callback_path,
             acs_media_streaming_websocket_path
         )
-        # Wire up transcript and email services
+        # Wire up transcript, email, and summarizer services
         caller.transcript_manager = transcript_manager
         caller.email_service = email_service
+        caller.call_summarizer = call_summarizer
         caller.rtmt = rtmt
-        logger.info("✅ ACS Caller configured with transcript and email services")
+        logger.info("✅ ACS Caller configured with transcript, email, and summarizer services")
     else:
         logger.warning("Azure Communication Services is not configured")
 

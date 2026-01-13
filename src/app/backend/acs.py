@@ -24,6 +24,7 @@ class AcsCaller:
     transcript_manager = None  # Reference to TranscriptManager
     email_service = None  # Reference to EmailService
     rtmt = None  # Reference to RTMiddleTier for transcript tracking
+    call_summarizer = None  # Reference to CallSummarizer
 
     def __init__(self, source_number:str, acs_connection_string: str, acs_callback_path: str, acs_media_streaming_websocket_path: str):
         self.source_number = source_number
@@ -90,14 +91,41 @@ class AcsCaller:
             duration_str = "N/A"
         
         # Get transcript
-        transcript_html = self.transcript_manager.format_as_html(call_connection_id)
         transcript_text = self.transcript_manager.format_as_text(call_connection_id)
+        
+        # Generate call summary using o4-mini
+        summary_data = None
+        if self.call_summarizer:
+            try:
+                summary_data = await self.call_summarizer.summarize_call(transcript_text, call_info)
+                print(f"📊 Call summary generated")
+                # Debug: Log what we got
+                if summary_data:
+                    print(f"   Summary keys: {list(summary_data.keys())}")
+                    if summary_data.get("summary"):
+                        print(f"   Summary length: {len(summary_data.get('summary'))} chars")
+                    if summary_data.get("zoom_info_table"):
+                        print(f"   Zoom info length: {len(summary_data.get('zoom_info_table'))} chars")
+            except Exception as e:
+                print(f"⚠️ Could not generate call summary: {str(e)}")
+        
+        # Get HTML transcript with summary
+        transcript_html = self.transcript_manager.format_as_html(
+            call_connection_id, 
+            summary_data=summary_data
+        )
         
         # Log the transcript to application logs
         print("\n" + "="*80)
         print(f"📋 CALL TRANSCRIPT - {phone_number} ({duration_str})")
         print("="*80)
         print(transcript_text)
+        if summary_data and summary_data.get("summary"):
+            print("\n" + "-"*80)
+            print("📊 CALL SUMMARY")
+            print("-"*80)
+            print(summary_data.get("full_response", summary_data.get("summary")))
+            print("-"*80)
         print("="*80 + "\n")
         
         # Send email

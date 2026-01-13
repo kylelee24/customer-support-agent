@@ -68,8 +68,8 @@ class TranscriptManager:
         
         return "\n".join(lines)
     
-    def format_as_html(self, session_id: str) -> str:
-        """Format transcript as HTML for email."""
+    def format_as_html(self, session_id: str, summary_data: dict = None) -> str:
+        """Format transcript as HTML for email with optional AI-generated summary."""
         entries = self.get_transcript(session_id)
         metadata = self.session_metadata.get(session_id, {})
         
@@ -129,6 +129,55 @@ class TranscriptManager:
         
         html_parts.append(f"<p><strong>Total Messages:</strong> {len(entries)}</p>")
         html_parts.append("</div>")
+        
+        # Add AI-generated summary if available
+        if summary_data and summary_data.get("summary"):
+            html_parts.append("<div class='summary-section' style='background-color: #e8f4f8; padding: 20px; border-radius: 5px; margin-bottom: 25px; border-left: 4px solid #0078d4;'>")
+            html_parts.append("<h2 style='margin-top: 0; font-size: 18px; color: #0078d4; margin-bottom: 15px;'>📊 AI-Generated Call Summary</h2>")
+            
+            # Add call summary
+            summary_text = summary_data.get("summary", "")
+            # Convert markdown to HTML (simple conversion for paragraphs)
+            summary_paragraphs = summary_text.split('\n\n')
+            for para in summary_paragraphs:
+                if para.strip():
+                    html_parts.append(f"<p style='margin: 10px 0; line-height: 1.6; color: #333;'>{para.strip()}</p>")
+            
+            # Add zoom meeting table if available
+            zoom_info = summary_data.get("zoom_info_table", "")
+            if zoom_info and "No meeting scheduled" not in zoom_info:
+                html_parts.append("<h3 style='margin-top: 20px; margin-bottom: 10px; font-size: 16px; color: #0078d4;'>🗓️ Scheduled Meeting</h3>")
+                # Convert markdown table to HTML table (simplified)
+                if "|" in zoom_info:
+                    html_parts.append("<div style='overflow-x: auto; margin-top: 10px;'>")
+                    html_parts.append("<table style='border-collapse: collapse; width: 100%; background: white; border-radius: 5px; overflow: hidden;'>")
+                    
+                    lines = zoom_info.strip().split('\n')
+                    for i, line in enumerate(lines):
+                        if '|' in line:
+                            cells = [cell.strip() for cell in line.split('|') if cell.strip()]
+                            if i == 0:
+                                # Header row
+                                html_parts.append("<thead style='background-color: #0078d4; color: white;'><tr>")
+                                for cell in cells:
+                                    html_parts.append(f"<th style='padding: 12px; text-align: left; font-weight: 600;'>{cell}</th>")
+                                html_parts.append("</tr></thead>")
+                            elif i > 1 and not all(c in ['-', ' ', '|'] for c in line):
+                                # Data row (skip separator line)
+                                html_parts.append("<tbody><tr>")
+                                for cell in cells:
+                                    html_parts.append(f"<td style='padding: 12px; border-bottom: 1px solid #ddd;'>{cell}</td>")
+                                html_parts.append("</tr></tbody>")
+                    
+                    html_parts.append("</table>")
+                    html_parts.append("</div>")
+                else:
+                    # Not a table, just show as text
+                    html_parts.append(f"<p style='margin: 10px 0; color: #333;'>{zoom_info}</p>")
+            elif zoom_info:
+                html_parts.append(f"<p style='margin: 15px 0; color: #666; font-style: italic;'>{zoom_info}</p>")
+            
+            html_parts.append("</div>")
         
         # Add transcript entries
         html_parts.append("<div class='transcript'>")

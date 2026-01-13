@@ -1,0 +1,15 @@
+# Sample Custom Conversation
+# Format: speaker: message text
+# Lines starting with # are comments and will be ignored
+
+assistant: Hello! This is Jane from EVITAVONNI Construction Group. Thanks for your interest!
+user: Hi Jane, I'd like to learn about your Bluetooth Hard Hat product.
+assistant: I'd be happy to tell you about it! It's a patented hands-free communication system that retrofits onto any standard hard hat. Would you like to schedule a Zoom demo?
+user: Yes, how about Friday at 10 AM?
+assistant: Friday at 10 AM EST works great! What's your email address?
+user: test@example.com
+assistant: Perfect! And your phone number?
+user: 555-123-4567
+assistant: Great! I have you scheduled for Friday at 10 AM EST. We'll send the Zoom link to test@example.com.
+user: Sounds good, thanks!
+assistant: You're welcome! Looking forward to the demo!
