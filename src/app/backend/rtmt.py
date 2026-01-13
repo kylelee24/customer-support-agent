@@ -1,12 +1,15 @@
 import aiohttp
 import asyncio
 import json
+import logging
 from typing import Any, Optional
 from aiohttp import ClientWebSocketResponse, web
 from azure.identity import DefaultAzureCredential, AzureDeveloperCliCredential, get_bearer_token_provider
 from azure.core.credentials import AzureKeyCredential
 from backend.tools.tools import RTToolCall, Tool, ToolResultDirection
 from backend.helpers import transform_acs_to_openai_format, transform_openai_to_acs_format
+
+logger = logging.getLogger("voicerag")
 
 class RTMiddleTier:
     endpoint: str
@@ -28,21 +31,122 @@ class RTMiddleTier:
 
     _tools_pending: dict[str, RTToolCall] = {}
     _token_provider = None
+    
+    # Transcript manager for recording conversations
+    transcript_manager = None
+    # Map of websocket connections to session IDs for transcript tracking
+    _session_map: dict[web.WebSocketResponse, str] = {}
+    # Buffer for accumulating transcript deltas
+    _transcript_buffer: dict[str, str] = {}
 
     def __init__(self, endpoint: str, deployment: str, credentials: AzureKeyCredential | AzureDeveloperCliCredential | DefaultAzureCredential):
         self.endpoint = endpoint
         self.deployment = deployment
+        self._session_map = {}
+        self._transcript_buffer = {}
         if isinstance(credentials, AzureKeyCredential):
             self.key = credentials.key
         else:
             self._token_provider = get_bearer_token_provider(credentials, "https://cognitiveservices.azure.com/.default")
             self._token_provider() # Warm up during startup so we have a token cached when the first request arrives
 
+    def _capture_transcript(self, message: Any, client_ws: web.WebSocketResponse):
+        """Capture transcript data from conversation messages."""
+        if not self.transcript_manager:
+            return
+        
+        # Get or create session ID for this websocket connection
+        session_id = self._session_map.get(client_ws)
+        if not session_id:
+            return
+        
+        msg_type = message.get("type", "")
+        
+        # Capture audio transcriptions (for audio-based conversations)
+        if msg_type == "conversation.item.input_audio_transcription.completed":
+            # User speech transcription
+            transcript = message.get("transcript")
+            if transcript:
+                self.transcript_manager.add_entry(session_id, "user", transcript)
+                logger.info(f"📝 Captured user audio transcript: {transcript[:50]}...")
+        
+        # Capture assistant audio transcripts (delta)
+        elif msg_type == "response.audio_transcript.delta":
+            # Assistant speech transcription (incremental)
+            delta = message.get("delta")
+            response_id = message.get("response_id", "default")
+            if delta:
+                # Accumulate deltas per response
+                buffer_key = f"{session_id}_{response_id}"
+                if buffer_key not in self._transcript_buffer:
+                    self._transcript_buffer[buffer_key] = ""
+                self._transcript_buffer[buffer_key] += delta
+        
+        elif msg_type == "response.audio_transcript.done":
+            # Assistant speech transcription complete
+            response_id = message.get("response_id", "default")
+            buffer_key = f"{session_id}_{response_id}"
+            transcript = message.get("transcript")
+            
+            # Use explicit transcript if provided, otherwise use accumulated buffer
+            final_transcript = transcript
+            if not final_transcript and buffer_key in self._transcript_buffer:
+                final_transcript = self._transcript_buffer[buffer_key]
+            
+            if final_transcript:
+                self.transcript_manager.add_entry(session_id, "assistant", final_transcript)
+                logger.info(f"📝 Captured assistant audio transcript: {final_transcript[:50]}...")
+            
+            # Clear buffer
+            if buffer_key in self._transcript_buffer:
+                del self._transcript_buffer[buffer_key]
+        
+        # Capture conversation items that contain transcripts (for text-based conversations)
+        elif msg_type == "conversation.item.created":
+            item = message.get("item", {})
+            item_type = item.get("type")
+            role = item.get("role")
+            
+            # Extract text from different item types
+            text = None
+            if item_type == "message":
+                # Message items contain content array
+                content = item.get("content", [])
+                for content_item in content:
+                    if content_item.get("type") == "input_text":
+                        text = content_item.get("text")
+                    elif content_item.get("type") == "text":
+                        text = content_item.get("text")
+                    elif content_item.get("type") == "input_audio":
+                        # Check if there's a transcript field
+                        transcript = content_item.get("transcript")
+                        if transcript:
+                            text = transcript
+                    
+                    if text:
+                        speaker = "user" if role == "user" else "assistant"
+                        self.transcript_manager.add_entry(session_id, speaker, text)
+        
+        # Also capture from response.text.delta for real-time assistant text
+        elif msg_type == "response.text.delta":
+            delta = message.get("delta")
+            if delta:
+                self.transcript_manager.add_entry(session_id, "assistant", delta)
+        
+        # Capture completed text from response.text.done
+        elif msg_type == "response.text.done":
+            text = message.get("text")
+            if text:
+                self.transcript_manager.add_entry(session_id, "assistant", text)
+    
     async def _process_message_to_client(self, message: Any, client_ws: web.WebSocketResponse, server_ws: ClientWebSocketResponse, is_acs_audio_stream: bool):
         # This method basically follows a 3-step process:
         # 1. Check if we need to react to the message (e.g. a function call needs to me made)
         # 2. Check if we need to transform the message to a different format (e.g. when we use Azure Communication Services)
         # 3. Send the transformed message to the client (Web App or Phone via ACS), if required
+
+        # Capture transcript data before processing
+        self._capture_transcript(message, client_ws)
 
         if message is not None:
             match message["type"]:
@@ -155,6 +259,22 @@ class RTMiddleTier:
     async def _process_message_to_server(self, data: Any, ws: web.WebSocketResponse, server_ws: ClientWebSocketResponse, is_acs_audio_stream: bool):
         # If the message comes from the Azure Communication Services audio stream, transform it to the OpenAI Realtime API format first
         if (is_acs_audio_stream):
+            # Extract call connection ID from ACS metadata if available
+            if isinstance(data, dict) and data.get("kind") == "AudioMetadata":
+                # Try to extract call connection ID from ACS metadata
+                if "callConnectionId" in data:
+                    call_connection_id = data["callConnectionId"]
+                    old_session_id = self._session_map.get(ws, "unknown")
+                    if old_session_id == "unknown" and call_connection_id:
+                        # Update the session mapping
+                        self._session_map[ws] = call_connection_id
+                        if self.transcript_manager:
+                            # Move the session to the correct ID
+                            if old_session_id in self.transcript_manager.transcripts:
+                                self.transcript_manager.transcripts[call_connection_id] = self.transcript_manager.transcripts.pop(old_session_id)
+                                self.transcript_manager.session_metadata[call_connection_id] = self.transcript_manager.session_metadata.pop(old_session_id, {})
+                                logger.info(f"📝 Updated session ID from 'unknown' to: {call_connection_id}")
+            
             data = transform_acs_to_openai_format(data, self.model, self.tools, self.system_message, self.temperature, self.max_tokens, self.disable_audio, self.selected_voice)
 
         if data is not None:
@@ -173,8 +293,31 @@ class RTMiddleTier:
                     session["tool_choice"] = "auto" if len(self.tools) > 0 else "none"
                     session["tools"] = [tool.schema for tool in self.tools.values()]
                     data["session"] = session
+                
+                case "input_audio_buffer.commit":
+                    # User is committing audio input - this will generate a transcript
+                    # The transcript will be captured in conversation.item.created event
+                    pass
 
             await server_ws.send_str(json.dumps(data))
+    
+    def set_session_id(self, ws: web.WebSocketResponse, session_id: str, metadata: dict = None):
+        """Associate a websocket connection with a session ID for transcript tracking."""
+        self._session_map[ws] = session_id
+        if self.transcript_manager:
+            self.transcript_manager.create_session(session_id, metadata)
+    
+    def get_session_id(self, ws: web.WebSocketResponse) -> Optional[str]:
+        """Get the session ID for a websocket connection."""
+        return self._session_map.get(ws)
+    
+    def close_session(self, ws: web.WebSocketResponse):
+        """Close the transcript session for a websocket connection."""
+        session_id = self._session_map.get(ws)
+        if session_id and self.transcript_manager:
+            self.transcript_manager.close_session(session_id)
+        if ws in self._session_map:
+            del self._session_map[ws]
 
     async def forward_messages(self, ws: web.WebSocketResponse, is_acs_audio_stream: bool):
         async with aiohttp.ClientSession(base_url=self.endpoint) as session:
@@ -218,3 +361,6 @@ class RTMiddleTier:
                 except ConnectionResetError:
                     # Ignore the errors resulting from the client disconnecting the socket
                     pass
+                finally:
+                    # Clean up session when websocket closes
+                    self.close_session(ws)

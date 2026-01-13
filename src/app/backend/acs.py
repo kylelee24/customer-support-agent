@@ -21,6 +21,9 @@ class AcsCaller:
     websocket_url: str
     media_streaming_configuration: MediaStreamingOptions
     call_events: dict  # Track call events by connection ID
+    transcript_manager = None  # Reference to TranscriptManager
+    email_service = None  # Reference to EmailService
+    rtmt = None  # Reference to RTMiddleTier for transcript tracking
 
     def __init__(self, source_number:str, acs_connection_string: str, acs_callback_path: str, acs_media_streaming_websocket_path: str):
         self.source_number = source_number
@@ -62,6 +65,57 @@ class AcsCaller:
         if data:
             print(f"  Data: {json.dumps(data, indent=2)}")
     
+    async def send_transcript_email(self, call_connection_id: str):
+        """Send transcript email for a completed call."""
+        if not self.transcript_manager or not self.email_service:
+            print(f"⚠️ Transcript or email service not configured. Skipping email for call {call_connection_id}")
+            return
+        
+        if not self.email_service.is_configured():
+            print(f"⚠️ Email service not configured. Skipping email for call {call_connection_id}")
+            return
+        
+        # Get call info
+        call_info = self.call_events.get(call_connection_id, {})
+        phone_number = call_info.get("target_number", "Unknown")
+        duration_seconds = call_info.get("duration_seconds", 0)
+        
+        # Format duration
+        if duration_seconds:
+            minutes = int(duration_seconds) // 60
+            seconds = int(duration_seconds) % 60
+            duration_str = f"{minutes}m {seconds}s"
+        else:
+            duration_str = "N/A"
+        
+        # Get transcript
+        transcript_html = self.transcript_manager.format_as_html(call_connection_id)
+        transcript_text = self.transcript_manager.format_as_text(call_connection_id)
+        
+        # Log the transcript to application logs
+        print("\n" + "="*80)
+        print(f"📋 CALL TRANSCRIPT - {phone_number} ({duration_str})")
+        print("="*80)
+        print(transcript_text)
+        print("="*80 + "\n")
+        
+        # Send email
+        try:
+            success = await self.email_service.send_call_transcript(
+                call_id=call_connection_id,
+                phone_number=phone_number,
+                html_transcript=transcript_html,
+                plain_text_transcript=transcript_text,
+                duration=duration_str
+            )
+            
+            if success:
+                print(f"✅ Transcript email sent successfully for call {call_connection_id}")
+            else:
+                print(f"❌ Failed to send transcript email for call {call_connection_id}")
+        except Exception as e:
+            print(f"❌ Error sending transcript email: {str(e)}")
+    
     async def initiate_call(self, target_number: str):
         self.call_automation_client = CallAutomationClient.from_connection_string(self.acs_connection_string)
         self.target_participant = PhoneNumberIdentifier(target_number)
@@ -90,6 +144,10 @@ class AcsCaller:
                 "target_number": target_number,
                 "source_number": self.source_number
             })
+            
+            # Update transcript manager metadata if available
+            if self.transcript_manager:
+                self.transcript_manager.update_session_metadata(call_id, self.call_events[call_id])
         
         return result
 
@@ -116,6 +174,13 @@ class AcsCaller:
                 if call_connection_id in self.call_events:
                     self.call_events[call_connection_id]["connected_at"] = datetime.now().isoformat()
                     self.call_events[call_connection_id]["status"] = "connected"
+                    
+                    # Update transcript metadata
+                    if self.transcript_manager:
+                        self.transcript_manager.update_session_metadata(
+                            call_connection_id, 
+                            self.call_events[call_connection_id]
+                        )
                 
                 self.log_call_event("CallConnected", call_connection_id, {
                     "call_info": self.call_events.get(call_connection_id, {})
@@ -133,10 +198,20 @@ class AcsCaller:
                         disconnected = datetime.fromisoformat(self.call_events[call_connection_id]["disconnected_at"])
                         duration_seconds = (disconnected - connected).total_seconds()
                         self.call_events[call_connection_id]["duration_seconds"] = duration_seconds
+                    
+                    # Update transcript metadata with final call info
+                    if self.transcript_manager:
+                        self.transcript_manager.update_session_metadata(
+                            call_connection_id, 
+                            self.call_events[call_connection_id]
+                        )
                 
                 self.log_call_event("CallDisconnected", call_connection_id, {
                     "call_info": self.call_events.get(call_connection_id, {})
                 })
+                
+                # Send transcript email after call disconnects
+                await self.send_transcript_email(call_connection_id)
             
             elif event.type == "Microsoft.Communication.CallTransferAccepted":
                 self.log_call_event("CallTransferAccepted", call_connection_id)

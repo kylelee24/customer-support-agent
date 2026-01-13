@@ -10,10 +10,12 @@ from backend.rtmt import RTMiddleTier
 from backend.azure import get_azure_credentials, fetch_prompt_from_azure_storage
 from backend.rtmt import RTMiddleTier
 from backend.acs import AcsCaller
+from backend.transcript_manager import TranscriptManager
+from backend.email_service import EmailService
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.aio import SearchClient
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)  # Changed to INFO to see transcript logs
 logger = logging.getLogger("voicerag")
 
 async def create_app():
@@ -42,6 +44,27 @@ async def create_app():
     else:
         logger.warning("Azure AI Search is not configured")
 
+    # Create the OpenAI Realtime API handler
+    rtmt = RTMiddleTier(llm_endpoint, llm_deployment, llm_credential)
+    
+    # Initialize transcript manager
+    transcript_manager = TranscriptManager()
+    rtmt.transcript_manager = transcript_manager
+    logger.info("✅ Transcript manager initialized")
+    
+    # Initialize email service
+    email_connection_string = os.environ.get("ACS_EMAIL_CONNECTION_STRING")
+    email_sender = os.environ.get("ACS_EMAIL_SENDER")
+    email_recipients = os.environ.get("TRANSCRIPT_EMAIL_RECIPIENTS", "").split(",")
+    email_recipients = [r.strip() for r in email_recipients if r.strip()]  # Clean up list
+    
+    email_service = None
+    if email_connection_string and email_sender and email_recipients:
+        email_service = EmailService(email_connection_string, email_sender, email_recipients)
+        logger.info(f"✅ Email service initialized with recipients: {', '.join(email_recipients)}")
+    else:
+        logger.warning("⚠️ Email service not configured. Set ACS_EMAIL_CONNECTION_STRING, ACS_EMAIL_SENDER, and TRANSCRIPT_EMAIL_RECIPIENTS environment variables.")
+
     # Register the Azure Communication Services
     acs_source_number = os.environ.get("ACS_SOURCE_NUMBER")
     acs_connection_string = os.environ.get("ACS_CONNECTION_STRING")
@@ -57,11 +80,13 @@ async def create_app():
             acs_callback_path,
             acs_media_streaming_websocket_path
         )
+        # Wire up transcript and email services
+        caller.transcript_manager = transcript_manager
+        caller.email_service = email_service
+        caller.rtmt = rtmt
+        logger.info("✅ ACS Caller configured with transcript and email services")
     else:
         logger.warning("Azure Communication Services is not configured")
-
-    # Create the OpenAI Realtime API handler
-    rtmt = RTMiddleTier(llm_endpoint, llm_deployment, llm_credential)
 
     # Set the system prompt
     system_prompt = None
@@ -96,6 +121,18 @@ async def create_app():
     async def websocket_handler_acs(request: web.Request):
         ws = web.WebSocketResponse()
         await ws.prepare(request)
+        
+        # Set up transcript session using the call connection ID from query params or headers
+        # The call connection ID should be available in the request
+        call_connection_id = request.query.get('callConnectionId', 'unknown')
+        
+        # Initialize transcript session with call metadata
+        if caller and call_connection_id in caller.call_events:
+            metadata = caller.call_events[call_connection_id]
+            rtmt.set_session_id(ws, call_connection_id, metadata)
+        else:
+            rtmt.set_session_id(ws, call_connection_id)
+        
         await rtmt.forward_messages(ws, True)
         return ws
 

@@ -54,6 +54,39 @@ At the moment, the configuration of Azure Communication Services phone number is
 
    <img src="assets/copy-number-hint.png" width="400" />
 
+#### Call Transcripts and Email Notifications
+
+The application automatically records call transcripts and can email them after each call completes. To enable email notifications:
+
+1. **Set up Azure Communication Services Email Domain:**
+   - In the Azure Portal, navigate to your Azure Communication Services resource
+   - In the left menu, select **Email** > **Domains**
+   - Either use the free Azure-managed domain or connect your custom domain
+   - Note the sender address (e.g., `DoNotReply@xxxxxxxx.azurecomm.net`)
+
+2. **Configure environment variables:**
+   
+   Add the following to your `.azure/xxx/.env` file:
+   
+   ```bash
+   # Email configuration for transcript delivery
+   ACS_EMAIL_CONNECTION_STRING=<your-acs-connection-string>
+   ACS_EMAIL_SENDER=DoNotReply@xxxxxxxx.azurecomm.net
+   TRANSCRIPT_EMAIL_RECIPIENTS=user1@example.com,user2@example.com
+   ```
+   
+   **Note:** 
+   - `ACS_EMAIL_CONNECTION_STRING` is the same connection string as `ACS_CONNECTION_STRING` from your ACS resource
+   - `ACS_EMAIL_SENDER` must be a verified sender from your ACS Email domain
+   - `TRANSCRIPT_EMAIL_RECIPIENTS` can be a comma-separated list of email addresses
+
+3. **Features:**
+   - Transcripts are automatically captured during each call
+   - Transcripts are logged to application logs (console output)
+   - HTML-formatted emails are sent immediately after each call ends
+   - Transcripts are saved to `call_logs/` directory as JSON files
+   - Emails include call metadata (phone number, duration, timestamp)
+
 ### Deploy the application
 
 To deploy the application, you can use the script provided in the `azd-hooks` folder. This script will build and deploy the user interface and the backend API. Before running the script, make sure you have the Azure CLI and the Azure Communication Services extension installed.

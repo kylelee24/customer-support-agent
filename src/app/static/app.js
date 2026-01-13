@@ -67,7 +67,7 @@ async function startRecording() {
         }
         // If you want to enable input audio transcription
         // input_audio_transcription: {
-        //     model: 'whisper-1'
+        //     model: 'whisper'
         // }
         // Do not include 'tools' and 'tool_choice'; backend will handle them
         // Other parameters like 'temperature' and 'max_response_output_tokens' can be set here if needed

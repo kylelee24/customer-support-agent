@@ -56,8 +56,18 @@ AZURE_SEARCH_API_KEY=$(az search admin-key show --service-name $AZURE_SEARCH_NAM
 STORAGE_ACCOUNT_NAME=$(az resource list -g $RESOURCE_GROUP --resource-type "Microsoft.Storage/storageAccounts" --query "[0].name" -o tsv)
 # Get the name of the Azure Communication Services instance
 AZURE_COMMUNICATION_SERVICES_NAME=$(az resource list -g $RESOURCE_GROUP --resource-type "Microsoft.Communication/communicationServices" --query "[0].name" -o tsv)
-# Get the connection string of the Azure Communication Services instance
-ACS_CONNECTION_STRING=$(az communication list-key --name $AZURE_COMMUNICATION_SERVICES_NAME --resource-group $RESOURCE_GROUP --query "primaryConnectionString" -o tsv)
+
+# Load ACS_CONNECTION_STRING from azd env (user may have custom ACS resource)
+source <(azd env get-values | grep "^ACS_CONNECTION_STRING=" | sed 's/^/export /')
+
+# If not set in azd env, fallback to auto-discovery
+if [ -z "$ACS_CONNECTION_STRING" ]; then
+    echo "ACS_CONNECTION_STRING not found in azd env, using auto-discovery..."
+    ACS_CONNECTION_STRING=$(az communication list-key --name $AZURE_COMMUNICATION_SERVICES_NAME --resource-group $RESOURCE_GROUP --query "primaryConnectionString" -o tsv)
+else
+    echo "Using ACS_CONNECTION_STRING from azd env"
+fi
+
 # Get the phone number of the Azure Communication Services instance
 AZURE_COMMUNICATION_SERVICES_PHONE_NUMBER=$(az communication phonenumber list --connection-string $ACS_CONNECTION_STRING --query "[0].phoneNumber" -o tsv)
 
@@ -113,12 +123,39 @@ echo "updating container app settings"
 # Fetch the container app hostname
 CONTAINER_APP_HOSTNAME=$(az containerapp show --name $ACA_NAME --resource-group $RESOURCE_GROUP --query properties.configuration.ingress.fqdn -o tsv)
 
+# Load additional environment variables from azd env
+echo "Loading additional environment variables from azd env..."
+source <(azd env get-values | grep -E "^(ACS_EMAIL_CONNECTION_STRING|ACS_EMAIL_SENDER|TRANSCRIPT_EMAIL_RECIPIENTS)=" | sed 's/^/export /')
+
+# Build the env vars list - START WITH REQUIRED VARS
+ENV_VARS="ACS_CONNECTION_STRING=$ACS_CONNECTION_STRING"
+ENV_VARS="$ENV_VARS ACS_CALLBACK_PATH=https://$CONTAINER_APP_HOSTNAME/acs"
+ENV_VARS="$ENV_VARS ACS_MEDIA_STREAMING_WEBSOCKET_PATH=wss://$CONTAINER_APP_HOSTNAME/realtime-acs"
+ENV_VARS="$ENV_VARS AZURE_SEARCH_API_KEY=$AZURE_SEARCH_API_KEY"
+ENV_VARS="$ENV_VARS AZURE_SEARCH_INDEX=$AZURE_SEARCH_INDEX_NAME"
+ENV_VARS="$ENV_VARS AZURE_SEARCH_SEMANTIC_CONFIGURATION=$AZURE_SEARCH_SEMANTIC_CONFIGURATION"
+
+echo "✅ Using ACS_CONNECTION_STRING: ${ACS_CONNECTION_STRING:0:50}..."
+
+# Add email configuration if present
+if [ ! -z "$ACS_EMAIL_CONNECTION_STRING" ]; then
+    ENV_VARS="$ENV_VARS ACS_EMAIL_CONNECTION_STRING=$ACS_EMAIL_CONNECTION_STRING"
+    echo "✅ Adding ACS_EMAIL_CONNECTION_STRING to deployment"
+fi
+
+if [ ! -z "$ACS_EMAIL_SENDER" ]; then
+    ENV_VARS="$ENV_VARS ACS_EMAIL_SENDER=$ACS_EMAIL_SENDER"
+    echo "✅ Adding ACS_EMAIL_SENDER to deployment"
+fi
+
+if [ ! -z "$TRANSCRIPT_EMAIL_RECIPIENTS" ]; then
+    ENV_VARS="$ENV_VARS TRANSCRIPT_EMAIL_RECIPIENTS=$TRANSCRIPT_EMAIL_RECIPIENTS"
+    echo "✅ Adding TRANSCRIPT_EMAIL_RECIPIENTS to deployment"
+fi
+
 # Update the container app settings
-az containerapp update --name $ACA_NAME --resource-group $RESOURCE_GROUP \
---set-env-vars ACS_CALLBACK_PATH="https://$CONTAINER_APP_HOSTNAME/acs" \
-               ACS_MEDIA_STREAMING_WEBSOCKET_PATH="wss://$CONTAINER_APP_HOSTNAME/realtime-acs" \
-               AZURE_SEARCH_API_KEY="$AZURE_SEARCH_API_KEY" AZURE_SEARCH_INDEX="$AZURE_SEARCH_INDEX_NAME"  \
-               AZURE_SEARCH_SEMANTIC_CONFIGURATION="$AZURE_SEARCH_SEMANTIC_CONFIGURATION"
+echo "Updating container app with environment variables..."
+az containerapp update --name $ACA_NAME --resource-group $RESOURCE_GROUP --set-env-vars $ENV_VARS
 
 # Configuration of Azure AI search index
 echo "Executing upload_data.sh to upload documents to Azure blob storage"

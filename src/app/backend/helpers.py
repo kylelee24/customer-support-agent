@@ -32,6 +32,10 @@ def transform_acs_to_openai_format(msg_data: Any, model: Optional[str], tools: d
                     "prefix_padding_ms": 600, # More padding before detecting speech
                     "silence_duration_ms": 800 # Longer silence required to detect end of turn
                 },
+                # Enable input audio transcription so we can capture user speech as text
+                "input_audio_transcription": {
+                    "model": "whisper"
+                }
             }
         }
 
