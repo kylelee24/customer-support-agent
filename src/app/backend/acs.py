@@ -90,8 +90,17 @@ class AcsCaller:
         else:
             duration_str = "N/A"
         
-        # Get transcript
+        # Get transcript — fall back to 'unknown' session if the call_connection_id
+        # was never linked (race condition between WebSocket connect and CallConnected)
         transcript_text = self.transcript_manager.format_as_text(call_connection_id)
+        if transcript_text == "No transcript available." and self.transcript_manager.get_transcript("unknown"):
+            print(f"🔗 Transcript not found under {call_connection_id}, using 'unknown' session")
+            # Move the transcript to the correct call_connection_id
+            self.transcript_manager.transcripts[call_connection_id] = self.transcript_manager.transcripts.pop("unknown")
+            if "unknown" in self.transcript_manager.session_metadata:
+                self.transcript_manager.session_metadata[call_connection_id] = self.transcript_manager.session_metadata.pop("unknown")
+            self.transcript_manager.update_session_metadata(call_connection_id, self.call_events.get(call_connection_id, {}))
+            transcript_text = self.transcript_manager.format_as_text(call_connection_id)
         
         # Generate call summary using o4-mini
         summary_data = None
