@@ -41,6 +41,7 @@ This repo extends the original Azure Solution Accelerator with the following fea
 
 | Document | Description |
 |----------|-------------|
+| [Features](FEATURES.md) | Implemented features list, recommended tools and integrations with implementation tracking |
 | [Architecture](ARCHITECTURE.md) | Infrastructure diagrams, call data flow, property search flow, component details |
 | [Deployment](DEPLOYMENT.md) | Deploy scripts, local dev setup, environment variables, troubleshooting |
 | [Standards](STANDARDS.md) | Coding patterns, tool authoring guide, commit conventions, branch strategy |
