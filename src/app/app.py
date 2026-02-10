@@ -6,6 +6,7 @@ from aiohttp import web
 from dotenv import load_dotenv
 from backend.tools.rag.ai_search import report_grounding_tool, search_tool
 from backend.tools.realtordr.property_search import property_search_tool, refresh_taxonomy_cache
+from backend.tools.end_call import end_call_tool
 from backend.helpers import load_prompt_from_markdown
 from backend.rtmt import RTMiddleTier
 from backend.azure import get_azure_credentials, fetch_prompt_from_azure_storage
@@ -124,6 +125,10 @@ async def create_app():
     # Register property search tool (independent of Azure AI Search)
     rtmt.tools["property_search"] = property_search_tool(llm_endpoint, llm_key, azure_credentials if not llm_key else None)
     logger.info("✅ Property search tool registered")
+
+    # Register end_call tool so the AI agent can hang up after saying goodbye
+    rtmt.tools["end_call"] = end_call_tool(rtmt, caller)
+    logger.info("✅ End call tool registered")
 
     # Refresh taxonomy cache from realtordr.com (non-blocking)
     try:

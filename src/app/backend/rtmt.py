@@ -31,6 +31,7 @@ class RTMiddleTier:
 
     _tools_pending: dict[str, RTToolCall] = {}
     _token_provider = None
+    _active_tool_context: dict = None
     
     # Transcript manager for recording conversations
     transcript_manager = None
@@ -192,7 +193,9 @@ class RTMiddleTier:
                         tool_call = self._tools_pending[message["item"]["call_id"]]
                         tool = self.tools[item["name"]]
                         args = item["arguments"]
+                        self._active_tool_context = {"client_ws": client_ws, "is_acs": is_acs_audio_stream}
                         result = await tool.target(json.loads(args))
+                        self._active_tool_context = None
 
                         await server_ws.send_json({
                             "type": "conversation.item.create",
