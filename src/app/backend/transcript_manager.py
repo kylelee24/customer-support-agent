@@ -145,39 +145,21 @@ class TranscriptManager:
                 if para.strip():
                     html_parts.append(f"<p style='margin: 10px 0; line-height: 1.6; color: #333;'>{para.strip()}</p>")
             
-            # Add zoom meeting table if available
-            zoom_info = summary_data.get("zoom_info_table", "")
-            if zoom_info and "No meeting scheduled" not in zoom_info:
-                html_parts.append("<h3 style='margin-top: 20px; margin-bottom: 10px; font-size: 16px; color: #0078d4;'>🗓️ Scheduled Meeting</h3>")
-                # Convert markdown table to HTML table (simplified)
-                if "|" in zoom_info:
-                    html_parts.append("<div style='overflow-x: auto; margin-top: 10px;'>")
-                    html_parts.append("<table style='border-collapse: collapse; width: 100%; background: white; border-radius: 5px; overflow: hidden;'>")
-                    
-                    lines = zoom_info.strip().split('\n')
-                    for i, line in enumerate(lines):
-                        if '|' in line:
-                            cells = [cell.strip() for cell in line.split('|') if cell.strip()]
-                            if i == 0:
-                                # Header row
-                                html_parts.append("<thead style='background-color: #0078d4; color: white;'><tr>")
-                                for cell in cells:
-                                    html_parts.append(f"<th style='padding: 12px; text-align: left; font-weight: 600;'>{cell}</th>")
-                                html_parts.append("</tr></thead>")
-                            elif i > 1 and not all(c in ['-', ' ', '|'] for c in line):
-                                # Data row (skip separator line)
-                                html_parts.append("<tbody><tr>")
-                                for cell in cells:
-                                    html_parts.append(f"<td style='padding: 12px; border-bottom: 1px solid #ddd;'>{cell}</td>")
-                                html_parts.append("</tr></tbody>")
-                    
-                    html_parts.append("</table>")
-                    html_parts.append("</div>")
-                else:
-                    # Not a table, just show as text
-                    html_parts.append(f"<p style='margin: 10px 0; color: #333;'>{zoom_info}</p>")
-            elif zoom_info:
-                html_parts.append(f"<p style='margin: 15px 0; color: #666; font-style: italic;'>{zoom_info}</p>")
+            # Add lead qualification table if available
+            lead_info = summary_data.get("lead_info_table", "")
+            if lead_info and "No lead information" not in lead_info:
+                html_parts.append("<h3 style='margin-top: 20px; margin-bottom: 10px; font-size: 16px; color: #0078d4;'>👤 Lead Qualification</h3>")
+                self._render_markdown_table_or_text(html_parts, lead_info)
+            elif lead_info:
+                html_parts.append(f"<p style='margin: 15px 0; color: #666; font-style: italic;'>{lead_info}</p>")
+
+            # Add consultation details table if available
+            consultation_info = summary_data.get("consultation_info_table", "")
+            if consultation_info and "No consultation scheduled" not in consultation_info:
+                html_parts.append("<h3 style='margin-top: 20px; margin-bottom: 10px; font-size: 16px; color: #0078d4;'>🗓️ Scheduled Consultation</h3>")
+                self._render_markdown_table_or_text(html_parts, consultation_info)
+            elif consultation_info:
+                html_parts.append(f"<p style='margin: 15px 0; color: #666; font-style: italic;'>{consultation_info}</p>")
             
             html_parts.append("</div>")
         else:
@@ -213,6 +195,32 @@ class TranscriptManager:
         
         return "\n".join(html_parts)
     
+    def _render_markdown_table_or_text(self, html_parts: list, content: str):
+        """Convert a markdown table to HTML table, or render as text."""
+        if "|" in content:
+            html_parts.append("<div style='overflow-x: auto; margin-top: 10px;'>")
+            html_parts.append("<table style='border-collapse: collapse; width: 100%; background: white; border-radius: 5px; overflow: hidden;'>")
+
+            lines = content.strip().split('\n')
+            for i, line in enumerate(lines):
+                if '|' in line:
+                    cells = [cell.strip() for cell in line.split('|') if cell.strip()]
+                    if i == 0:
+                        html_parts.append("<thead style='background-color: #0078d4; color: white;'><tr>")
+                        for cell in cells:
+                            html_parts.append(f"<th style='padding: 12px; text-align: left; font-weight: 600;'>{cell}</th>")
+                        html_parts.append("</tr></thead>")
+                    elif i > 1 and not all(c in ['-', ' ', '|'] for c in line):
+                        html_parts.append("<tbody><tr>")
+                        for cell in cells:
+                            html_parts.append(f"<td style='padding: 12px; border-bottom: 1px solid #ddd;'>{cell}</td>")
+                        html_parts.append("</tr></tbody>")
+
+            html_parts.append("</table>")
+            html_parts.append("</div>")
+        else:
+            html_parts.append(f"<p style='margin: 10px 0; color: #333;'>{content}</p>")
+
     def save_transcript(self, session_id: str, filename: str = None) -> Path:
         """Save transcript to a file."""
         if not filename:

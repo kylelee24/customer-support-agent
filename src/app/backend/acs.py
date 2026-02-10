@@ -113,8 +113,10 @@ class AcsCaller:
                     print(f"   Summary keys: {list(summary_data.keys())}")
                     if summary_data.get("summary"):
                         print(f"   Summary length: {len(summary_data.get('summary'))} chars")
-                    if summary_data.get("zoom_info_table"):
-                        print(f"   Zoom info length: {len(summary_data.get('zoom_info_table'))} chars")
+                    if summary_data.get("lead_info_table"):
+                        print(f"   Lead info length: {len(summary_data.get('lead_info_table'))} chars")
+                    if summary_data.get("consultation_info_table"):
+                        print(f"   Consultation info length: {len(summary_data.get('consultation_info_table'))} chars")
             except Exception as e:
                 print(f"⚠️ Could not generate call summary: {str(e)}")
         

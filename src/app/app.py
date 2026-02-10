@@ -5,6 +5,7 @@ from typing import Optional
 from aiohttp import web
 from dotenv import load_dotenv
 from backend.tools.rag.ai_search import report_grounding_tool, search_tool
+from backend.tools.realtordr.property_search import property_search_tool, refresh_taxonomy_cache
 from backend.helpers import load_prompt_from_markdown
 from backend.rtmt import RTMiddleTier
 from backend.azure import get_azure_credentials, fetch_prompt_from_azure_storage
@@ -119,6 +120,16 @@ async def create_app():
     if search_client is not None and search_semantic_configuration is not None:
         rtmt.tools["search"] = search_tool(search_client, search_semantic_configuration)
         rtmt.tools["report_grounding"] = report_grounding_tool(search_client)
+
+    # Register property search tool (independent of Azure AI Search)
+    rtmt.tools["property_search"] = property_search_tool(llm_endpoint, llm_key, azure_credentials if not llm_key else None)
+    logger.info("✅ Property search tool registered")
+
+    # Refresh taxonomy cache from realtordr.com (non-blocking)
+    try:
+        await refresh_taxonomy_cache()
+    except Exception as e:
+        logger.warning(f"⚠️ Taxonomy cache refresh failed (will use fallbacks): {e}")
 
     # Define the WebSocket handler for the Web Frontend
     async def websocket_handler(request: web.Request):
