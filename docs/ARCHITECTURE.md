@@ -90,7 +90,13 @@ sequenceDiagram
         end
     end
 
-    Caller->>App: Disconnect
+    alt Agent ends call
+        OAI->>App: function_call (end_call)
+        App->>Caller: Hang up (ACS) / Close WebSocket
+    else Caller hangs up
+        Caller->>App: Disconnect
+    end
+
     App->>Post: Save transcript (JSON)
     App->>Post: Generate AI summary (o4-mini)
     App->>Post: Send email (ACS Email)
@@ -110,6 +116,7 @@ sequenceDiagram
 | `search` | TO_SERVER | RAG search against Azure AI Search knowledge base |
 | `report_grounding` | TO_CLIENT | Cite sources from knowledge base (web UI only) |
 | `property_search` | TO_SERVER | Search realtordr.com listings or look up by property ID |
+| `end_call` | TO_SERVER | Disconnect the call after the agent says goodbye (ACS hang_up or WebSocket close) |
 
 ## Property Search Flow
 
@@ -150,5 +157,6 @@ At startup, the app fetches WordPress taxonomy terms (property types, cities, st
 | **CallSummarizer** | `src/app/backend/call_summarizer.py` | Uses o4-mini to generate call summaries with lead qualification and consultation details from transcripts. |
 | **EmailService** | `src/app/backend/email_service.py` | Sends HTML-formatted transcript emails via ACS Email after calls complete. |
 | **Property Search** | `src/app/backend/tools/realtordr/property_search.py` | Queries realtordr.com WordPress API for listings. Supports search by criteria or direct ID lookup. Summarizes results via o4-mini for voice. |
+| **End Call** | `src/app/backend/tools/end_call.py` | Allows the AI agent to programmatically disconnect calls via ACS `hang_up` or WebSocket close. |
 | **AI Search (RAG)** | `src/app/backend/tools/rag/ai_search.py` | Hybrid semantic + vector search against Azure AI Search. Provides `search_tool` and `report_grounding_tool`. |
 | **Azure Helpers** | `src/app/backend/azure.py` | Credential management (`DefaultAzureCredential` or API key). Fetches system prompt from Azure Storage blob. |
