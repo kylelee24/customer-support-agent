@@ -177,6 +177,7 @@ Please provide your response in the following format:
             logger.exception(e)
             return {
                 "summary": "Error generating call summary.",
-                "zoom_info_table": "Unable to extract meeting information.",
+                "lead_info_table": "",
+                "consultation_info_table": "",
                 "error": str(e)
             }

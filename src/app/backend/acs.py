@@ -1,3 +1,5 @@
+import asyncio
+
 from aiohttp import web
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent
@@ -108,7 +110,6 @@ class AcsCaller:
             try:
                 summary_data = await self.call_summarizer.summarize_call(transcript_text, call_info)
                 print(f"📊 Call summary generated")
-                # Debug: Log what we got
                 if summary_data:
                     print(f"   Summary keys: {list(summary_data.keys())}")
                     if summary_data.get("summary"):
@@ -117,8 +118,14 @@ class AcsCaller:
                         print(f"   Lead info length: {len(summary_data.get('lead_info_table'))} chars")
                     if summary_data.get("consultation_info_table"):
                         print(f"   Consultation info length: {len(summary_data.get('consultation_info_table'))} chars")
-            except Exception as e:
-                print(f"⚠️ Could not generate call summary: {str(e)}")
+            except BaseException as e:
+                # BaseException catches asyncio.CancelledError (not caught by Exception alone)
+                print(f"⚠️ Could not generate call summary: {type(e).__name__}: {str(e)}")
+                summary_data = {
+                    "summary": "Call summary could not be generated (AI service error).",
+                    "lead_info_table": "",
+                    "consultation_info_table": ""
+                }
         
         # Get HTML transcript with summary
         transcript_html = self.transcript_manager.format_as_html(
@@ -156,6 +163,13 @@ class AcsCaller:
         except Exception as e:
             print(f"❌ Error sending transcript email: {str(e)}")
     
+    async def _send_transcript_email_safe(self, call_connection_id: str):
+        """Wrapper that ensures background email task never crashes silently."""
+        try:
+            await self.send_transcript_email(call_connection_id)
+        except Exception as e:
+            print(f"❌ Background transcript email task failed: {type(e).__name__}: {str(e)}")
+
     async def initiate_call(self, target_number: str):
         self.call_automation_client = CallAutomationClient.from_connection_string(self.acs_connection_string)
         self.target_participant = PhoneNumberIdentifier(target_number)
@@ -292,9 +306,11 @@ class AcsCaller:
                 self.log_call_event("CallDisconnected", call_connection_id, {
                     "call_info": self.call_events.get(call_connection_id, {})
                 })
-                
-                # Send transcript email after call disconnects
-                await self.send_transcript_email(call_connection_id)
+
+                # Fire transcript email as a background task so the webhook
+                # returns 200 immediately — prevents ACS timeout from cancelling
+                # the o4-mini summarization mid-flight.
+                asyncio.create_task(self._send_transcript_email_safe(call_connection_id))
             
             elif event.type == "Microsoft.Communication.CallTransferAccepted":
                 self.log_call_event("CallTransferAccepted", call_connection_id)
