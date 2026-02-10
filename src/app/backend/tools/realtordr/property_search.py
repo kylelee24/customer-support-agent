@@ -1,5 +1,6 @@
 import logging
-from typing import Any
+import re
+from typing import Any, Optional
 import aiohttp
 from openai import AsyncAzureOpenAI
 from azure.identity import get_bearer_token_provider
@@ -60,7 +61,8 @@ _property_search_tool_schema = {
         "Search available real estate listings on the MacHenry Realtor website (realtordr.com). "
         "Use this tool when a caller asks about specific properties, pricing, what's available in a "
         "certain area, or any listing-related question. Pass a natural language description of what "
-        "the caller is looking for."
+        "the caller is looking for. Also supports looking up a specific property by its ID number "
+        "(e.g. '55069', 'rdr-55069', or '55069-property')."
     ),
     "parameters": {
         "type": "object",
@@ -69,7 +71,8 @@ _property_search_tool_schema = {
                 "type": "string",
                 "description": (
                     "Natural language description of what the caller wants, e.g. "
-                    "'3 bedroom villa in Cabarete under 300k' or 'beachfront condos in Sosua'"
+                    "'3 bedroom villa in Cabarete under 300k' or 'beachfront condos in Sosua'. "
+                    "Can also be a property ID like '55069' or 'rdr-55069'."
                 ),
             }
         },
@@ -116,6 +119,42 @@ async def refresh_taxonomy_cache():
         f"🏠 Property taxonomy cache loaded: {len(_property_type_map)} types, "
         f"{len(_city_map)} cities, {len(_status_map)} statuses"
     )
+
+
+# Matches: "55069", "rdr-55069", "55069-property", "rdr 55069", "property 55069"
+_PROPERTY_ID_PATTERN = re.compile(
+    r"(?:rdr[- ]?)?(\d{4,6})(?:[- ]?property)?$", re.IGNORECASE
+)
+
+
+def _extract_property_id(query: str) -> Optional[int]:
+    """Try to extract a numeric property ID from the query string.
+    Accepts: '55069', 'rdr-55069', 'rdr 55069', '55069-property', 'property 55069'."""
+    q = query.strip()
+    # Also handle "property 55069" prefix form
+    q = re.sub(r"^property[- ]?", "", q, flags=re.IGNORECASE).strip()
+    m = _PROPERTY_ID_PATTERN.match(q)
+    if m:
+        return int(m.group(1))
+    return None
+
+
+async def _fetch_property_by_id(property_id: int) -> Optional[dict]:
+    """Fetch a single property by its WordPress post ID."""
+    try:
+        async with aiohttp.ClientSession(headers=API_HEADERS) as session:
+            async with session.get(
+                f"{REALTORDR_API_BASE}/properties/{property_id}",
+                timeout=aiohttp.ClientTimeout(total=API_TIMEOUT),
+            ) as resp:
+                if resp.status == 200:
+                    raw = await resp.json()
+                    return _extract_property_fields(raw)
+                logger.warning(f"Property ID {property_id} lookup returned status {resp.status}")
+                return None
+    except Exception as e:
+        logger.error(f"Property ID {property_id} lookup failed: {e}")
+        return None
 
 
 def _parse_query_filters(query: str) -> dict[str, Any]:
@@ -262,8 +301,16 @@ async def _property_search(client: AsyncAzureOpenAI, args: Any) -> ToolResult:
     query = args.get("query", "")
     logger.info(f"🏠 Property search: '{query}'")
 
-    params = _parse_query_filters(query)
-    properties = await _fetch_properties(params)
+    # Check if the query is a property ID lookup
+    property_id = _extract_property_id(query)
+    if property_id:
+        logger.info(f"🏠 Looking up property by ID: {property_id}")
+        prop = await _fetch_property_by_id(property_id)
+        properties = [prop] if prop else []
+    else:
+        params = _parse_query_filters(query)
+        properties = await _fetch_properties(params)
+
     logger.info(f"🏠 Found {len(properties)} properties")
 
     summary = await _summarize_for_voice(client, query, properties)
