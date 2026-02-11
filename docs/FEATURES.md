@@ -22,6 +22,7 @@
 | 16 | **Simplified Deploy Script** | One-command deploy (`scripts/deploy.sh`) — ACR build + container app update. | Feb 2025 |
 | 17 | **Azure Recovery Stack** | Terraform + CLI scripts for resource cleanup and recreation (`infra/recovery/`). | Jan 2025 |
 | 18 | **Auto Hang-Up (end_call)** | `end_call` tool lets the AI agent programmatically disconnect after saying goodbye. Triggers ACS `hang_up` for phone calls or closes the WebSocket for browser sessions. | Feb 2025 |
+| 19 | **Unit Test Suite** | 110 pytest tests covering all backend modules: transcript manager, call summarizer, email service, RTMiddleTier, helpers, tools, end_call, and property search. Uses mocks for Azure/OpenAI dependencies. | Feb 2025 |
 
 ---
 

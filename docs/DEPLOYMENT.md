@@ -111,6 +111,24 @@ python src/app/app.py
 
 For inbound calls during local dev, create a separate Event Grid subscription pointing to your ngrok URL.
 
+## Running Tests
+
+```bash
+# Install test dependencies (one-time)
+pip install -r requirements-dev.txt
+
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ --cov=backend --cov-report=term-missing
+
+# Run a specific test file
+pytest tests/test_transcript_manager.py -v
+```
+
+The test suite (110 tests) covers all backend modules using mocks — no Azure credentials or live services required.
+
 ## Environment Variables
 
 | Variable | Required | Description |

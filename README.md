@@ -217,6 +217,15 @@ python scripts/bulk_call/bulk_call.py
 
 See [scripts/bulk_call/README.md](scripts/bulk_call/README.md) for complete guide.
 
+### Unit Tests
+
+Run the pytest suite (110 tests, no Azure credentials required):
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
+
 ### Call Transcript Testing
 
 Test the transcript, AI summary, and email features without making phone calls:

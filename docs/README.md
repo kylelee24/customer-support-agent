@@ -77,7 +77,7 @@ customer-support-agent/
 │   └── bulk_call/                    # Bulk calling automation
 ├── azd-hooks/                        # Azure Developer CLI hooks
 │   └── deploy.sh                     # Full provisioning deploy
-├── tests/                            # Test suite
+├── tests/                            # Unit tests (pytest) & integration tests
 ├── data/                             # Knowledge base PDFs
 ├── call_logs/                        # Runtime transcripts & logs
 └── docs/                             # This documentation folder
