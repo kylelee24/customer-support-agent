@@ -35,6 +35,7 @@ This repo extends the original Azure Solution Accelerator with the following fea
 | **Simplified Deploy Script** | One-command deploy via `scripts/deploy.sh` (ACR build + container update) |
 | **Azure Recovery Stack** | Terraform configuration and CLI scripts for resource cleanup/recreation (`infra/recovery/`) |
 | **English-Default Language** | Mackenzie speaks English unless the caller initiates in Spanish |
+| **Auto Hang-Up** | `end_call` tool lets the AI agent disconnect after saying goodbye (ACS hang_up or WebSocket close) |
 | **Multiple System Prompts** | Archived prompts for Santorini Estiatorio, Gold Standard Construction, EVITAVONNI |
 
 ## Documentation
@@ -64,6 +65,7 @@ customer-support-agent/
 │   │   ├── helpers.py                # Utilities
 │   │   └── tools/                    # Function-calling tools
 │   │       ├── tools.py              # Tool base classes
+│   │       ├── end_call.py           # Auto hang-up tool
 │   │       ├── rag/ai_search.py      # Azure AI Search (RAG)
 │   │       └── realtordr/            # Property search tool
 │   └── static/                       # Frontend (HTML/JS/CSS)
