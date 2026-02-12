@@ -53,6 +53,11 @@ class AcsCaller:
         self.log_dir.mkdir(exist_ok=True)
         self.events_log_file = self.log_dir / "call_events.jsonl"
     
+    @staticmethod
+    def _json_default(obj):
+        """Fallback serializer for objects that json.dumps cannot handle."""
+        return f"<{type(obj).__name__}>"
+
     def log_call_event(self, event_type: str, call_connection_id: str, data: dict = None):
         """Log call events to a JSONL file for tracking."""
         event = {
@@ -61,15 +66,15 @@ class AcsCaller:
             "call_connection_id": call_connection_id,
             "data": data or {}
         }
-        
+
         # Write to JSONL file (one JSON object per line)
         with open(self.events_log_file, 'a') as f:
-            f.write(json.dumps(event) + '\n')
-        
+            f.write(json.dumps(event, default=self._json_default) + '\n')
+
         # Also print to console for real-time monitoring
         print(f"[{event['timestamp']}] {event_type} - Call ID: {call_connection_id}")
         if data:
-            print(f"  Data: {json.dumps(data, indent=2)}")
+            print(f"  Data: {json.dumps(data, indent=2, default=self._json_default)}")
     
     async def send_transcript_email(self, call_connection_id: str):
         """Send transcript email for a completed call."""
