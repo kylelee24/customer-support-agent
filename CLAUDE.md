@@ -90,6 +90,7 @@ python scripts/bulk_call/bulk_call.py
 - **`transcript_manager.py` — TranscriptManager**: Session-based transcript tracking with timestamps. Saves transcripts as JSON to `call_logs/`.
 - **`call_summarizer.py` — CallSummarizer**: Uses GPT-4o-mini to generate call summaries and extract meeting information from transcripts.
 - **`email_service.py` — EmailService**: Sends HTML-formatted transcript emails via ACS Email after calls complete.
+- **`cosmos_service.py` — CosmosCallLogger**: Logs call records to Azure Cosmos DB (`call_center/calls`) through the full lifecycle. Stores transcript, AI summary, lead info, and errors. Auto-creates database/container on startup.
 - **`tools/rag/ai_search.py`**: RAG integration with Azure AI Search — provides `search_tool` and `report_grounding_tool` for the AI agent's function calling.
 - **`azure.py`**: Azure credential management and fetching system prompts from Azure Storage.
 
@@ -99,7 +100,7 @@ python scripts/bulk_call/bulk_call.py
 2. RTMiddleTier opens a parallel WebSocket to OpenAI Realtime API
 3. Audio/messages are forwarded bidirectionally between client and OpenAI
 4. Function calls (RAG search) are intercepted and executed by RTMiddleTier
-5. On call end: transcript is saved, AI summary generated, email sent
+5. On call end: transcript is saved, AI summary generated, Cosmos DB updated, email sent
 
 ### System Prompt
 
@@ -121,3 +122,4 @@ Configuration is loaded from `.env` (locally) or `.azure/<env-name>/.env` (Azure
 - `ACS_CALLBACK_PATH`, `ACS_MEDIA_STREAMING_WEBSOCKET_PATH` — ACS webhook URLs (must be publicly reachable; use ngrok locally)
 - `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_INDEX`, `AZURE_SEARCH_API_KEY`, `AZURE_SEARCH_SEMANTIC_CONFIGURATION` — RAG/knowledge base
 - `ACS_EMAIL_CONNECTION_STRING`, `ACS_EMAIL_SENDER`, `TRANSCRIPT_EMAIL_RECIPIENTS` — Email transcript delivery
+- `COSMOS_DB_CONNECTION_STRING` — Cosmos DB connection for persistent call logging

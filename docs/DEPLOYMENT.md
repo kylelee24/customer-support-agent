@@ -148,6 +148,7 @@ The test suite (110 tests) covers all backend modules using mocks — no Azure c
 | `ACS_EMAIL_CONNECTION_STRING` | No | ACS connection string for email (enables transcript emails) |
 | `ACS_EMAIL_SENDER` | No | Verified sender address (e.g., `DoNotReply@xxx.azurecomm.net`) |
 | `TRANSCRIPT_EMAIL_RECIPIENTS` | No | Comma-separated email list for transcript delivery |
+| `COSMOS_DB_CONNECTION_STRING` | No | Azure Cosmos DB connection string (enables persistent call logging) |
 | `HOST` | No | Server bind address (default: `localhost`) |
 | `PORT` | No | Server port (default: `8765`) |
 
@@ -176,3 +177,4 @@ az storage blob upload \
 | Email not sending | Missing `ACS_EMAIL_*` environment variables | Set `ACS_EMAIL_CONNECTION_STRING`, `ACS_EMAIL_SENDER`, `TRANSCRIPT_EMAIL_RECIPIENTS` |
 | System prompt not updating | Azure Storage prompt overrides local file | Upload new prompt to `prompt` container, or delete the blob to use local file |
 | Agent speaks Spanish unexpectedly | System prompt language rule not reaching model | Ensure system prompt includes the "Language Rule" section at the top |
+| Cosmos DB not logging calls | `COSMOS_DB_CONNECTION_STRING` not set or Cosmos DB account doesn't exist | Create a Cosmos DB account (NoSQL API), get connection string, set env var on Container App. Database/container are auto-created. |

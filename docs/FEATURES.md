@@ -23,6 +23,7 @@
 | 17 | **Azure Recovery Stack** | Terraform + CLI scripts for resource cleanup and recreation (`infra/recovery/`). | Jan 2025 |
 | 18 | **Auto Hang-Up (end_call)** | `end_call` tool lets the AI agent programmatically disconnect after saying goodbye. Triggers ACS `hang_up` for phone calls or closes the WebSocket for browser sessions. | Feb 2025 |
 | 19 | **Unit Test Suite** | 110 pytest tests covering all backend modules: transcript manager, call summarizer, email service, RTMiddleTier, helpers, tools, end_call, and property search. Uses mocks for Azure/OpenAI dependencies. | Feb 2025 |
+| 20 | **Cosmos DB Call Logging** | Persistent call history in Azure Cosmos DB (`call_center/calls`). Documents track the full lifecycle: initiated → connected → summarizing → completed, with transcript, AI summary, lead info, and errors. Database and container are auto-created on first run. Graceful degradation when not configured. | Feb 2026 |
 
 ---
 
@@ -62,6 +63,6 @@ New function-calling tools and integrations to enhance Mackenzie's capabilities.
 | # | Feature | Description | Priority | Effort | Status | Implemented |
 |---|---------|-------------|----------|--------|--------|-------------|
 | R8 | **Call Recording & Playback** | Store full audio recordings (ACS supports this natively) alongside transcripts. Enable playback from the web UI or email links. | Low | Medium | Pending | — |
-| R9 | **Caller ID & Repeat Caller Recognition** | Match inbound phone numbers against previous call logs. If a repeat caller, give Mackenzie context: "Welcome back! Last time you were interested in villas in Cabarete." | High | Medium | Pending | — |
+| R9 | **Caller ID & Repeat Caller Recognition** | Match inbound phone numbers against previous call logs. If a repeat caller, give Mackenzie context: "Welcome back! Last time you were interested in villas in Cabarete." Cosmos DB call logging (Feature #20) provides the queryable data store needed for this. | High | Medium | Unblocked | — |
 | R10 | **Real-Time Dashboard** | Web dashboard showing active calls, recent transcripts, lead pipeline, and property search analytics. | Low | Large | Pending | — |
 | R11 | **Voicemail & Callback Queue** | When calls disconnect unexpectedly or the caller requests a callback, queue a follow-up task for the team with caller details and conversation context. | Medium | Medium | Pending | — |

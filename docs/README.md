@@ -37,6 +37,7 @@ This repo extends the original Azure Solution Accelerator with the following fea
 | **English-Default Language** | Mackenzie speaks English unless the caller initiates in Spanish |
 | **Auto Hang-Up** | `end_call` tool lets the AI agent disconnect after saying goodbye (ACS hang_up or WebSocket close) |
 | **Multiple System Prompts** | Archived prompts for Santorini Estiatorio, Gold Standard Construction, EVITAVONNI |
+| **Cosmos DB Call Logging** | Persistent call history in Cosmos DB — tracks full lifecycle with transcript, AI summary, and lead info |
 
 ## Documentation
 
@@ -61,6 +62,7 @@ customer-support-agent/
 │   │   ├── transcript_manager.py     # Transcript capture & storage
 │   │   ├── call_summarizer.py        # AI summarization (o4-mini)
 │   │   ├── email_service.py          # Email delivery
+│   │   ├── cosmos_service.py         # Cosmos DB call logging
 │   │   ├── azure.py                  # Azure credentials & storage
 │   │   ├── helpers.py                # Utilities
 │   │   └── tools/                    # Function-calling tools

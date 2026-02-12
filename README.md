@@ -73,6 +73,9 @@ The application automatically records call transcripts and can email them after 
    ACS_EMAIL_CONNECTION_STRING=<your-acs-connection-string>
    ACS_EMAIL_SENDER=DoNotReply@xxxxxxxx.azurecomm.net
    TRANSCRIPT_EMAIL_RECIPIENTS=user1@example.com,user2@example.com
+
+   # Cosmos DB for persistent call history (optional)
+   COSMOS_DB_CONNECTION_STRING=AccountEndpoint=https://your-account.documents.azure.com:443/;AccountKey=your-key;
    ```
    
    **Note:** 

@@ -32,6 +32,8 @@ graph TD
 
         EventGrid["Event Grid (Incoming Call Events)"]
 
+        CosmosDB["Cosmos DB (Call History)"]
+
         subgraph Monitor["Monitoring"]
             AppInsights["Application Insights"]
             LogAnalytics["Log Analytics"]
@@ -41,6 +43,7 @@ graph TD
     CA <--> OpenAI
     CA <--> ACS
     CA <--> AISearch
+    CA --> CosmosDB
     EventGrid -->|Webhook| CA
     CA --> AppInsights
 ```
@@ -56,6 +59,7 @@ graph TD
 | **AI Search** | Semantic + vector search over knowledge base documents (RAG) |
 | **Storage Account** | Blob storage for knowledge base PDFs (`content` container) and system prompt override (`prompt` container) |
 | **Event Grid** | Routes incoming call events from ACS to the `/acs/incoming` webhook |
+| **Cosmos DB** | Persistent call history — one document per call with transcript, AI summary, lead info, and lifecycle status. Database: `call_center`, Container: `calls`, partitioned by `/phone_number`. |
 | **Application Insights + Log Analytics** | Telemetry, logging, and monitoring |
 
 ## Call Data Flow
@@ -99,6 +103,7 @@ sequenceDiagram
 
     App->>Post: Save transcript (JSON)
     App->>Post: Generate AI summary (o4-mini)
+    App->>Post: Update Cosmos DB (transcript + summary)
     App->>Post: Send email (ACS Email)
 ```
 
@@ -156,6 +161,7 @@ At startup, the app fetches WordPress taxonomy terms (property types, cities, st
 | **TranscriptManager** | `src/app/backend/transcript_manager.py` | Session-based transcript tracking with timestamps. Saves transcripts as JSON to `call_logs/`. Generates HTML for email. |
 | **CallSummarizer** | `src/app/backend/call_summarizer.py` | Uses o4-mini to generate call summaries with lead qualification and consultation details from transcripts. |
 | **EmailService** | `src/app/backend/email_service.py` | Sends HTML-formatted transcript emails via ACS Email after calls complete. |
+| **CosmosCallLogger** | `src/app/backend/cosmos_service.py` | Logs call records to Azure Cosmos DB through the full lifecycle (initiated → connected → summarizing → completed). Stores transcript, AI summary, lead info, and errors. Auto-creates database and container on startup. |
 | **Property Search** | `src/app/backend/tools/realtordr/property_search.py` | Queries realtordr.com WordPress API for listings. Supports search by criteria or direct ID lookup. Summarizes results via o4-mini for voice. |
 | **End Call** | `src/app/backend/tools/end_call.py` | Allows the AI agent to programmatically disconnect calls via ACS `hang_up` or WebSocket close. |
 | **AI Search (RAG)** | `src/app/backend/tools/rag/ai_search.py` | Hybrid semantic + vector search against Azure AI Search. Provides `search_tool` and `report_grounding_tool`. |
