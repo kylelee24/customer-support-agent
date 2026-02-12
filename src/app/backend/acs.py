@@ -27,6 +27,7 @@ class AcsCaller:
     email_service = None  # Reference to EmailService
     rtmt = None  # Reference to RTMiddleTier for transcript tracking
     call_summarizer = None  # Reference to CallSummarizer
+    cosmos_call_logger = None  # Reference to CosmosCallLogger
 
     def __init__(self, source_number:str, acs_connection_string: str, acs_callback_path: str, acs_media_streaming_websocket_path: str):
         self.source_number = source_number
@@ -127,6 +128,20 @@ class AcsCaller:
                     "consultation_info_table": ""
                 }
         
+        # Save transcript and summary to Cosmos DB
+        if self.cosmos_call_logger:
+            try:
+                await self.cosmos_call_logger.update_call_transcript_and_summary(
+                    call_connection_id=call_connection_id,
+                    phone_number=phone_number,
+                    transcript=transcript_text,
+                    ai_summary=summary_data.get("summary") if summary_data else None,
+                    lead_info=summary_data.get("lead_info_table") if summary_data else None,
+                    consultation_info=summary_data.get("consultation_info_table") if summary_data else None,
+                )
+            except Exception as e:
+                print(f"⚠️ Failed to save transcript to Cosmos DB: {e}")
+
         # Get HTML transcript with summary
         transcript_html = self.transcript_manager.format_as_html(
             call_connection_id, 
@@ -169,6 +184,15 @@ class AcsCaller:
             await self.send_transcript_email(call_connection_id)
         except Exception as e:
             print(f"❌ Background transcript email task failed: {type(e).__name__}: {str(e)}")
+            # Log the error to Cosmos DB
+            if self.cosmos_call_logger:
+                call_info = self.call_events.get(call_connection_id, {})
+                phone_number = call_info.get("target_number", "Unknown")
+                await self.cosmos_call_logger.log_call_error(
+                    call_connection_id, phone_number,
+                    stage="post_call_processing",
+                    message=f"{type(e).__name__}: {str(e)}",
+                )
 
     async def initiate_call(self, target_number: str):
         self.call_automation_client = CallAutomationClient.from_connection_string(self.acs_connection_string)
@@ -202,7 +226,16 @@ class AcsCaller:
             # Update transcript manager metadata if available
             if self.transcript_manager:
                 self.transcript_manager.update_session_metadata(call_id, self.call_events[call_id])
-        
+
+            # Log to Cosmos DB
+            if self.cosmos_call_logger:
+                await self.cosmos_call_logger.create_call_record(
+                    call_connection_id=call_id,
+                    phone_number=target_number,
+                    call_direction="outbound",
+                    source_number=self.source_number,
+                )
+
         return result
 
     async def answer_inbound_call(self, incoming_call_context: str):
@@ -225,9 +258,10 @@ class AcsCaller:
             # Track different call events
             if event.type == "Microsoft.Communication.CallConnected":
                 print("✅ Call connected")
-                
+
                 # Initialize call_events entry if this is an inbound call (not already tracked)
-                if call_connection_id not in self.call_events:
+                is_inbound = call_connection_id not in self.call_events
+                if is_inbound:
                     # Check if we have pending incoming call info
                     if hasattr(self, '_pending_incoming_call') and self._pending_incoming_call:
                         from_number = self._pending_incoming_call.get('from_number', 'Unknown')
@@ -279,6 +313,21 @@ class AcsCaller:
                                 self.rtmt._session_map[ws] = call_connection_id
                                 print(f"🔗 Updated WebSocket session mapping: unknown → {call_connection_id}")
                 
+                # Log to Cosmos DB
+                if self.cosmos_call_logger and call_connection_id in self.call_events:
+                    call_info = self.call_events[call_connection_id]
+                    phone_number = call_info.get("target_number", "Unknown")
+                    if is_inbound:
+                        await self.cosmos_call_logger.create_call_record(
+                            call_connection_id=call_connection_id,
+                            phone_number=phone_number,
+                            call_direction="inbound",
+                            source_number=call_info.get("source_number", self.source_number),
+                        )
+                    await self.cosmos_call_logger.update_call_connected(
+                        call_connection_id, phone_number
+                    )
+
                 self.log_call_event("CallConnected", call_connection_id, {
                     "call_info": self.call_events.get(call_connection_id, {})
                 })
@@ -303,6 +352,15 @@ class AcsCaller:
                             self.call_events[call_connection_id]
                         )
                 
+                # Log to Cosmos DB
+                if self.cosmos_call_logger and call_connection_id in self.call_events:
+                    call_info = self.call_events[call_connection_id]
+                    phone_number = call_info.get("target_number", "Unknown")
+                    duration = call_info.get("duration_seconds")
+                    await self.cosmos_call_logger.update_call_disconnected(
+                        call_connection_id, phone_number, duration
+                    )
+
                 self.log_call_event("CallDisconnected", call_connection_id, {
                     "call_info": self.call_events.get(call_connection_id, {})
                 })

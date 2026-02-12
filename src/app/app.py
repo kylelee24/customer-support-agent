@@ -15,6 +15,7 @@ from backend.acs import AcsCaller
 from backend.transcript_manager import TranscriptManager
 from backend.email_service import EmailService
 from backend.call_summarizer import CallSummarizer
+from backend.cosmos_service import CosmosCallLogger
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.aio import SearchClient
 
@@ -76,6 +77,20 @@ async def create_app():
     else:
         logger.warning("⚠️ Email service not configured. Set ACS_EMAIL_CONNECTION_STRING, ACS_EMAIL_SENDER, and TRANSCRIPT_EMAIL_RECIPIENTS environment variables.")
 
+    # Initialize Cosmos DB call logger
+    cosmos_call_logger = None
+    cosmos_connection_string = os.environ.get("COSMOS_DB_CONNECTION_STRING")
+    if cosmos_connection_string:
+        cosmos_call_logger = CosmosCallLogger(cosmos_connection_string)
+        await cosmos_call_logger.initialize()
+        if cosmos_call_logger.is_configured():
+            logger.info("✅ Cosmos DB call logger initialized")
+        else:
+            logger.warning("⚠️ Cosmos DB call logger failed to initialize")
+            cosmos_call_logger = None
+    else:
+        logger.warning("⚠️ Cosmos DB not configured. Set COSMOS_DB_CONNECTION_STRING environment variable.")
+
     # Register the Azure Communication Services
     acs_source_number = os.environ.get("ACS_SOURCE_NUMBER")
     acs_connection_string = os.environ.get("ACS_CONNECTION_STRING")
@@ -91,12 +106,13 @@ async def create_app():
             acs_callback_path,
             acs_media_streaming_websocket_path
         )
-        # Wire up transcript, email, and summarizer services
+        # Wire up transcript, email, summarizer, and Cosmos DB services
         caller.transcript_manager = transcript_manager
         caller.email_service = email_service
         caller.call_summarizer = call_summarizer
+        caller.cosmos_call_logger = cosmos_call_logger
         caller.rtmt = rtmt
-        logger.info("✅ ACS Caller configured with transcript, email, and summarizer services")
+        logger.info("✅ ACS Caller configured with transcript, email, summarizer, and Cosmos DB services")
     else:
         logger.warning("Azure Communication Services is not configured")
 
