@@ -236,9 +236,13 @@ class TranscriptManager:
         
         filepath = self.log_dir / filename
         
+        # Filter out internal keys (e.g. _client) that aren't JSON-serializable
+        raw_metadata = self.session_metadata.get(session_id, {})
+        metadata = {k: v for k, v in raw_metadata.items() if not k.startswith("_")}
+
         data = {
             "session_id": session_id,
-            "metadata": self.session_metadata.get(session_id, {}),
+            "metadata": metadata,
             "entries": [entry.to_dict() for entry in self.get_transcript(session_id)],
             "saved_at": datetime.now().isoformat()
         }
