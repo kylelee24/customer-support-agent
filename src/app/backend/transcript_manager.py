@@ -68,7 +68,7 @@ class TranscriptManager:
         
         return "\n".join(lines)
     
-    def format_as_html(self, session_id: str, summary_data: dict = None) -> str:
+    def format_as_html(self, session_id: str, summary_data: dict = None, recording_url: str = None) -> str:
         """Format transcript as HTML for email with optional AI-generated summary."""
         entries = self.get_transcript(session_id)
         metadata = self.session_metadata.get(session_id, {})
@@ -129,7 +129,14 @@ class TranscriptManager:
         
         html_parts.append(f"<p><strong>Total Messages:</strong> {len(entries)}</p>")
         html_parts.append("</div>")
-        
+
+        # Add recording download link if available
+        if recording_url:
+            html_parts.append("<div style='background-color: #e8f5e9; padding: 15px; border-radius: 5px; margin-bottom: 25px; border-left: 4px solid #28a745;'>")
+            html_parts.append(f"<p style='margin: 0;'><strong>🎙️ Call Recording:</strong> "
+                              f"<a href='{recording_url}' style='color: #0078d4; text-decoration: none; font-weight: bold;'>Download Audio (.wav)</a></p>")
+            html_parts.append("</div>")
+
         # Add AI-generated summary if available
         if summary_data and summary_data.get("summary"):
             logger.info(f"📊 Adding summary to HTML (length: {len(summary_data.get('summary'))} chars)")

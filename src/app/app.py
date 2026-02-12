@@ -16,6 +16,7 @@ from backend.transcript_manager import TranscriptManager
 from backend.email_service import EmailService
 from backend.call_summarizer import CallSummarizer
 from backend.cosmos_service import CosmosCallLogger
+from backend.recording_service import RecordingService
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.aio import SearchClient
 
@@ -91,6 +92,20 @@ async def create_app():
     else:
         logger.warning("⚠️ Cosmos DB not configured. Set COSMOS_DB_CONNECTION_STRING environment variable.")
 
+    # Initialize recording service (uses same Azure Storage account)
+    recording_service = None
+    storage_connection_string = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+    if storage_connection_string:
+        recording_service = RecordingService(storage_connection_string)
+        if recording_service.is_configured():
+            recording_service.ensure_container_exists()
+            logger.info("✅ Recording service initialized")
+        else:
+            logger.warning("⚠️ Recording service failed to initialize")
+            recording_service = None
+    else:
+        logger.warning("⚠️ Recording service not configured. Set AZURE_STORAGE_CONNECTION_STRING environment variable.")
+
     # Register the Azure Communication Services
     acs_source_number = os.environ.get("ACS_SOURCE_NUMBER")
     acs_connection_string = os.environ.get("ACS_CONNECTION_STRING")
@@ -111,8 +126,9 @@ async def create_app():
         caller.email_service = email_service
         caller.call_summarizer = call_summarizer
         caller.cosmos_call_logger = cosmos_call_logger
+        caller.recording_service = recording_service
         caller.rtmt = rtmt
-        logger.info("✅ ACS Caller configured with transcript, email, summarizer, and Cosmos DB services")
+        logger.info("✅ ACS Caller configured with transcript, email, summarizer, Cosmos DB, and recording services")
     else:
         logger.warning("Azure Communication Services is not configured")
 

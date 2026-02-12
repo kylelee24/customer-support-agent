@@ -66,6 +66,7 @@ class CosmosCallLogger:
             "ai_summary": None,
             "lead_info": None,
             "consultation_info": None,
+            "recording_url": None,
             "errors": [],
             "created_at": now,
             "updated_at": now,
@@ -151,6 +152,27 @@ class CosmosCallLogger:
             logger.error(
                 f"Cosmos DB: failed to update transcript/summary: {e}"
             )
+
+    async def update_call_recording(
+        self,
+        call_connection_id: str,
+        phone_number: str,
+        recording_url: str,
+    ):
+        """Update a call record with the recording SAS URL."""
+        if not self.is_configured():
+            return
+        now = datetime.utcnow().isoformat() + "Z"
+        try:
+            item = await self.container.read_item(
+                item=call_connection_id, partition_key=phone_number
+            )
+            item["recording_url"] = recording_url
+            item["updated_at"] = now
+            await self.container.upsert_item(item)
+            logger.info(f"Cosmos DB: call {call_connection_id} recording URL saved")
+        except Exception as e:
+            logger.error(f"Cosmos DB: failed to update recording URL: {e}")
 
     async def log_call_error(
         self, call_connection_id: str, phone_number: str, stage: str, message: str

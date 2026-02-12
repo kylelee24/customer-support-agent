@@ -28,6 +28,7 @@ class AcsCaller:
     rtmt = None  # Reference to RTMiddleTier for transcript tracking
     call_summarizer = None  # Reference to CallSummarizer
     cosmos_call_logger = None  # Reference to CosmosCallLogger
+    recording_service = None  # Reference to RecordingService
 
     def __init__(self, source_number:str, acs_connection_string: str, acs_callback_path: str, acs_media_streaming_websocket_path: str):
         self.source_number = source_number
@@ -142,10 +143,30 @@ class AcsCaller:
             except Exception as e:
                 print(f"⚠️ Failed to save transcript to Cosmos DB: {e}")
 
+        # Wait for recording to appear in blob storage
+        recording_url = None
+        try:
+            recording_url = await self._wait_for_recording(call_connection_id)
+            if recording_url:
+                print(f"🎙️ Recording SAS URL generated for call {call_connection_id}")
+                # Save recording URL to Cosmos DB
+                if self.cosmos_call_logger:
+                    try:
+                        await self.cosmos_call_logger.update_call_recording(
+                            call_connection_id=call_connection_id,
+                            phone_number=phone_number,
+                            recording_url=recording_url,
+                        )
+                    except Exception as e:
+                        print(f"⚠️ Failed to save recording URL to Cosmos DB: {e}")
+        except Exception as e:
+            print(f"⚠️ Error waiting for recording: {e}")
+
         # Get HTML transcript with summary
         transcript_html = self.transcript_manager.format_as_html(
-            call_connection_id, 
-            summary_data=summary_data
+            call_connection_id,
+            summary_data=summary_data,
+            recording_url=recording_url,
         )
         
         # Log the transcript to application logs
@@ -216,7 +237,8 @@ class AcsCaller:
                 "target_number": target_number,
                 "source_number": self.source_number,
                 "initiated_at": datetime.now().isoformat(),
-                "status": "initiated"
+                "status": "initiated",
+                "_client": self.call_automation_client,
             }
             self.log_call_event("CallInitiated", call_id, {
                 "target_number": target_number,
@@ -240,6 +262,7 @@ class AcsCaller:
 
     async def answer_inbound_call(self, incoming_call_context: str):
         self.call_automation_client = CallAutomationClient.from_connection_string(self.acs_connection_string)
+        self._pending_incoming_call["_client"] = self.call_automation_client
         self.call_automation_client.answer_call(
             incoming_call_context,
             self.acs_callback_path,
@@ -263,23 +286,26 @@ class AcsCaller:
                 is_inbound = call_connection_id not in self.call_events
                 if is_inbound:
                     # Check if we have pending incoming call info
+                    pending_client = None
                     if hasattr(self, '_pending_incoming_call') and self._pending_incoming_call:
                         from_number = self._pending_incoming_call.get('from_number', 'Unknown')
                         to_number = self._pending_incoming_call.get('to_number', self.source_number)
                         initiated_at = self._pending_incoming_call.get('timestamp', datetime.now().isoformat())
+                        pending_client = self._pending_incoming_call.get('_client')
                         print(f"📞 Using incoming call info: from {from_number} to {to_number}")
                     else:
                         from_number = "Unknown"
                         to_number = self.source_number
                         initiated_at = datetime.now().isoformat()
-                    
+
                     self.call_events[call_connection_id] = {
                         "initiated_at": initiated_at,
                         "status": "connected",
                         "target_number": from_number,  # For incoming calls, the "target" is actually the caller
-                        "source_number": to_number
+                        "source_number": to_number,
+                        "_client": pending_client or self.call_automation_client,
                     }
-                    
+
                     # Clear pending info
                     if hasattr(self, '_pending_incoming_call'):
                         self._pending_incoming_call = {}
@@ -331,7 +357,39 @@ class AcsCaller:
                 self.log_call_event("CallConnected", call_connection_id, {
                     "call_info": self.call_events.get(call_connection_id, {})
                 })
-            
+
+                # Start call recording (best-effort)
+                if self.recording_service and self.recording_service.is_configured():
+                    try:
+                        from azure.communication.callautomation import (
+                            ServerCallLocator,
+                            RecordingContent,
+                            RecordingChannel,
+                            RecordingFormat,
+                        )
+                        from azure.communication.callautomation._models import (
+                            AzureBlobContainerRecordingStorage,
+                        )
+
+                        server_call_id = event.data.get('serverCallId')
+                        client = self.call_events.get(call_connection_id, {}).get("_client", self.call_automation_client)
+                        if server_call_id and client:
+                            recording_result = client.start_recording(
+                                call_locator=ServerCallLocator(server_call_id),
+                                recording_content_type=RecordingContent.AUDIO,
+                                recording_channel_type=RecordingChannel.MIXED,
+                                recording_format_type=RecordingFormat.WAV,
+                                recording_storage=AzureBlobContainerRecordingStorage(
+                                    self.recording_service.get_container_url()
+                                ),
+                            )
+                            self.call_events[call_connection_id]["recording_id"] = recording_result.recording_id
+                            print(f"🎙️ Recording started: {recording_result.recording_id}")
+                        else:
+                            print("⚠️ Missing serverCallId or client — skipping recording")
+                    except Exception as e:
+                        print(f"⚠️ Failed to start recording: {e}")
+
             elif event.type == "Microsoft.Communication.CallDisconnected":
                 print("❌ Call disconnected")
                 if call_connection_id in self.call_events:
@@ -352,6 +410,16 @@ class AcsCaller:
                             self.call_events[call_connection_id]
                         )
                 
+                # Best-effort stop recording
+                recording_id = self.call_events.get(call_connection_id, {}).get("recording_id")
+                if recording_id:
+                    try:
+                        client = self.call_events[call_connection_id].get("_client", self.call_automation_client)
+                        client.stop_recording(recording_id)
+                        print(f"🎙️ Recording stopped: {recording_id}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to stop recording (ACS auto-stops): {e}")
+
                 # Log to Cosmos DB
                 if self.cosmos_call_logger and call_connection_id in self.call_events:
                     call_info = self.call_events[call_connection_id]
@@ -387,6 +455,25 @@ class AcsCaller:
                 self.log_call_event(event.type, call_connection_id)
 
         return web.Response(status=200)
+
+    async def _wait_for_recording(self, call_connection_id: str) -> str | None:
+        """Poll blob storage for the recording file. Returns a SAS URL or None."""
+        if not self.recording_service or not self.recording_service.is_configured():
+            return None
+        recording_id = self.call_events.get(call_connection_id, {}).get("recording_id")
+        if not recording_id:
+            return None
+
+        max_attempts = 20  # 20 * 15s = 5 minutes
+        for attempt in range(1, max_attempts + 1):
+            blob_name = self.recording_service.find_recording_blob(recording_id)
+            if blob_name:
+                print(f"🎙️ Recording found: {blob_name} (attempt {attempt})")
+                return self.recording_service.generate_sas_url(blob_name)
+            await asyncio.sleep(15)
+
+        print(f"⚠️ Recording not found after {max_attempts} attempts for {recording_id}")
+        return None
 
     async def inbound_call_handler(self, request):
         # Check if this is an Event Grid validation request
